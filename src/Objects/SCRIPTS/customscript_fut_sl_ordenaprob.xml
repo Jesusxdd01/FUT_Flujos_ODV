@@ -1,0 +1,25 @@
+<suitelet scriptid="customscript_fut_sl_ordenaprob">
+  <description></description>
+  <isinactive>F</isinactive>
+  <name>FUT_SL_procesarAprobacion</name>
+  <notifyadmins>F</notifyadmins>
+  <notifyemails></notifyemails>
+  <notifyowner>T</notifyowner>
+  <notifyuser>F</notifyuser>
+  <scriptfile>[/SuiteScripts/FUT_Aprobaciones_OV/FUT_SL_procesarAprobacion.js]</scriptfile>
+  <scriptdeployments>
+    <scriptdeployment scriptid="customdeploy_fut_sl_ordenaprob">
+      <allemployees>F</allemployees>
+      <allpartners>F</allpartners>
+      <allroles>T</allroles>
+      <audslctrole></audslctrole>
+      <eventtype></eventtype>
+      <isdeployed>T</isdeployed>
+      <isonline>F</isonline>
+      <loglevel>DEBUG</loglevel>
+      <runasrole>ADMINISTRATOR</runasrole>
+      <status>TESTING</status>
+      <title>FUT_SL_procesarAprobacion</title>
+    </scriptdeployment>
+  </scriptdeployments>
+</suitelet>
