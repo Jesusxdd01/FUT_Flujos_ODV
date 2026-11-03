@@ -39,14 +39,14 @@ define(['N/search', 'N/error', './FUT_MD_configAprobaciones'],
         try {
             const h = JSON.parse(String(raw));
             if (!h || h.version !== 1 || typeof h.done !== 'object' ||
-                !h.done || !Array.isArray(h.rejections) || !['active','rejected','approved'].includes(h.state)) {
+                !h.done || !Array.isArray(h.rejections) || !['active','rejected','approved','closed'].includes(h.state)) {
                 throw Error('Formato inesperado');
             }
             // Compatibilidad con OV creadas antes del módulo de historial.
             h.cycle = Number.isInteger(Number(h.cycle)) && Number(h.cycle) > 0
                 ? Number(h.cycle) : 1;
             return h;
-        } catch (e) { C.fail('El historial técnico de aprobaciones FUT no es válido. Contacte a soporte.'); }
+        } catch (e) { C.fail('No fue posible consultar el historial de autorizaciones. Contacte a soporte.'); }
     }
     function writeHistory(rec, h) { put(rec, F.history, JSON.stringify(h)); }
 
@@ -119,6 +119,7 @@ define(['N/search', 'N/error', './FUT_MD_configAprobaciones'],
         });
     }
     function nextStage(rec, cfg, hist) {
+        if (hist.state === 'closed') return {blocked:true, reason:'Esta orden está cerrada definitivamente y no admite nuevas autorizaciones.'};
         if (hist.state === 'rejected') return {blocked:true, reason:'La orden fue rechazada. Debe corregirse y reenviarse a aprobación.'};
         const groups = stageList(rec,cfg);
         for (const group of groups) {

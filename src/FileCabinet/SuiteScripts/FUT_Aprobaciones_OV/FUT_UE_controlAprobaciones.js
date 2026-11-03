@@ -1,12 +1,14 @@
 /**
  * @NApiVersion 2.1
  * @NScriptType UserEventScript
- * FUT | Creación, reaprobación, bloqueo nativo, botones e historial.
+ * FUT | Condiciones, aprobaciones, historial y cierre definitivo.
+ * Script: customscript_fut_ue_ordenAprob
+ * Deploy: customdeploy_fut_ue_ordenAprob
  */
 define(['N/record', 'N/runtime', 'N/error', 'N/log', 'N/ui/message',
         './FUT_MD_configAprobaciones', './FUT_MD_motorAprobaciones',
-        './FUT_MD_historialAprobaciones'],
-    (record, runtime, error, log, message, C, M, H) => {
+        './FUT_MD_historialAprobaciones', './FUT_MD_cierreOV'],
+    (record, runtime, error, log, message, C, M, H, Close) => {
 
     const F = C.F;
     const eq = (a, b) => String(a === null || a === undefined ? '' : a) ===
@@ -20,49 +22,162 @@ define(['N/record', 'N/runtime', 'N/error', 'N/log', 'N/ui/message',
     function nativeBlocked(rec) {
         const tranid = value(rec, 'tranid') || rec.id || '';
         throw error.create({
-            name: 'APROBACION_COMERCIAL_REQUERIDA',
-            notifyOff: true,
+            name: 'APROBACION_COMERCIAL_REQUERIDA', notifyOff: true,
             message: 'La orden ' + tranid + ' requiere aprobación comercial. ' +
                 'No es posible autorizarla desde esta lista. ' +
-                'Abra la orden de venta y utilice el botón Aprobar.'
+                'Abra la orden y utilice el botón Aprobar.'
         });
+    }
+    function closedBlocked() {
+        C.fail('Esta orden de venta está cerrada definitivamente. ' +
+            'No es posible editarla, aprobarla, reabrirla ni eliminarla.');
+    }
+    function loadCurrent(id) {
+        return record.load({type: record.Type.SALES_ORDER, id, isDynamic: false});
     }
 
     function beforeLoad(ctx) {
         if (!is(ctx, 'VIEW')) return;
         const cfg = C.get();
-        // En la cuenta FUT, customform llega vacío en ctx.newRecord en modo VIEW.
-        const rec = record.load({type: record.Type.SALES_ORDER,
-            id: ctx.newRecord.id, isDynamic: false});
-        if (!controlled(rec, cfg) || String(value(rec, 'orderstatus')) !== 'A') return;
-        const next = M.nextStage(rec, cfg, M.readHistory(rec));
-        if (next && next.blocked) {
-            ctx.form.addPageInitMessage({type: message.Type.WARNING,
-                title: 'Edición pendiente', message: next.reason,
-                duration: 10000});
+        // En esta cuenta customform no está disponible en ctx.newRecord en VIEW.
+        const rec = loadCurrent(ctx.newRecord.id);
+        const aplica = controlled(rec, cfg);
+
+        // La orden controlada utiliza exclusivamente el botón personalizado
+        // Cerrar. Evitar que se ejecute el cierre estándar, que no registra
+        // motivo ni activa el indicador de cierre definitivo.
+        if (aplica) {
+            try {
+                ctx.form.removeButton({id: 'closeremaining'});
+            } catch (e) {
+                log.debug({title: 'Cierre estándar no disponible para ocultar',
+                    details: String(e.message || e)});
+            }
+        }
+
+        if (Close.isClosed(rec)) {
+            ctx.form.addPageInitMessage({
+                type: message.Type.WARNING,
+                title: 'Orden cerrada definitivamente',
+                message: 'Esta orden está cerrada definitivamente. ' +
+                    'No es posible editarla ni continuar con sus autorizaciones.',
+                duration: 0
+            });
+            // El botón Editar no puede eliminarse de forma soportada desde
+            // SuiteScript. beforeSubmit impide guardar modificaciones.
+            try { ctx.form.removeButton({id: 'approve'}); } catch (e) {}
             return;
         }
-        if (!next || !next.users.includes(String(runtime.getCurrentUser().id))) return;
+        if (!aplica) return;
+        const status = String(value(rec, 'orderstatus') || '');
+        if (status !== 'A' && status !== 'B') return;
+
         ctx.form.clientScriptModulePath = './FUT_CS_accionesAprobacion.js';
-        ctx.form.addButton({id: 'custpage_fut_aprobar', label: 'Aprobar',
-            functionName: 'futAprobar(' + Number(rec.id) + ')'});
-        ctx.form.addButton({id: 'custpage_fut_rechazar', label: 'Rechazar',
-            functionName: 'futRechazar(' + Number(rec.id) + ')'});
+        if (status === 'A') {
+            const hist = M.readHistory(rec);
+            const next = M.nextStage(rec, cfg, hist);
+            if (next && next.blocked) {
+                ctx.form.addPageInitMessage({
+                    type: message.Type.WARNING,
+                    title: hist.state === 'rejected' ? 'Edición pendiente' :
+                        'Configuración de aprobación pendiente',
+                    message: next.reason,
+                    duration: 10000
+                });
+            } else if (next && next.users.includes(String(runtime.getCurrentUser().id))) {
+                ctx.form.addButton({
+                    id: 'custpage_fut_aprobar', label: 'Aprobar',
+                    functionName: 'futAprobar(' + Number(rec.id) + ')'
+                });
+                ctx.form.addButton({
+                    id: 'custpage_fut_rechazar', label: 'Rechazar',
+                    functionName: 'futRechazar(' + Number(rec.id) + ')'
+                });
+            }
+        }
+        
+        // Mostrar Cerrar únicamente si la orden
+        // todavía no inició operaciones de surtido,
+        // facturación u otros movimientos relacionados.
+
+        let puedeCerrar = false;
+
+        try {
+
+            // Valida estado, documentos relacionados
+            // y cantidades operativas de las líneas.
+            Close.validate(rec, cfg);
+
+            puedeCerrar = true;
+
+        } catch (e) {
+
+            log.audit({
+                title: 'Cierre no disponible',
+                details: JSON.stringify({
+                    orden: rec.id,
+                    motivo: e.message || String(e)
+                })
+            });
+        }
+
+        // Mantener el botón como última acción.
+        if (puedeCerrar) {
+
+            ctx.form.addButton({
+                id: 'custpage_fut_cerrar',
+                label: 'Cerrar',
+                functionName:
+                    'futCerrar(' + Number(rec.id) + ')'
+            });
+        }
+
     }
 
     function beforeSubmit(ctx) {
         const rec = ctx.newRecord;
         const old = ctx.oldRecord;
+        const event = ctx.type;
+
+        // El candado FUT se verifica ANTES de la configuración, formulario y
+        // validaciones ordinarias para proteger todas las rutas de edición.
+        // XEDIT entrega registros parciales: se consulta el registro persistido.
+        let prior = old;
+        if (!is(ctx, 'CREATE') && rec.id && (is(ctx, 'XEDIT') || !prior)) {
+            prior = loadCurrent(rec.id);
+        }
+        if (prior && Close.isClosed(prior)) closedBlocked();
+
+        if (is(ctx, 'DELETE')) return;
+
+        if (is(ctx, 'CREATE')) {
+            // Una copia de OV cerrada no debe heredar el candado definitivo.
+            if (Close.isClosed(rec)) rec.setValue({fieldId: Close.LOCK, value: false});
+        }
+        if (is(ctx, 'XEDIT') && rec.getFields().includes(Close.LOCK)) {
+            C.fail('El indicador de cierre definitivo sólo se administra desde el botón Cerrar OV.');
+        }
+
         const cfg = C.get();
+        if (Close.isClosed(rec)) {
+            // Sólo el Suitelet puede ejecutar la transición FALSE -> TRUE.
+            if (!is(ctx, 'EDIT') || runtime.executionContext !== runtime.ContextType.SUITELET) {
+                C.fail('El cierre definitivo debe realizarse desde el botón ' +
+                    'Cerrar de la orden de venta.');
+            }
+            // Revalidar incluso si otra Suitelet intentara marcar el candado.
+            if (!prior) C.fail('No se pudo verificar el estado anterior de la orden.');
+            Close.validate(prior, cfg);
+            return;
+        }
+
         if (is(ctx, 'APPROVE') || is(ctx, 'REJECT')) {
             const base = old || rec;
             if (controlled(base, cfg) && M.checked(base).length) nativeBlocked(base);
             return;
         }
         if (is(ctx, 'XEDIT')) {
-            // XEDIT no incluye todas las líneas: conserva el control existente.
-            const stored = record.load({type: record.Type.SALES_ORDER,
-                id: rec.id, isDynamic: false});
+            const stored = prior || loadCurrent(rec.id);
             if (!controlled(stored, cfg) && !reapproval(stored, cfg)) return;
             const unsafe = new Set(['entity', 'total', 'customform', 'orderstatus',
                 F.history, F.level, F.next]
@@ -78,7 +193,7 @@ define(['N/record', 'N/runtime', 'N/error', 'N/log', 'N/ui/message',
         const nowReap = reapproval(rec, cfg);
         const previouslyControlled = old && (controlled(old, cfg) || reapproval(old, cfg));
         if (previouslyControlled && !nowInit && !nowReap) C.fail(
-            'No se permite trasladar esta orden a un formulario fuera del control FUT ' +
+            'No se permite cambiar esta orden a un formulario fuera del proceso de autorización ' +
             'mediante edición ordinaria. Consulte al administrador.');
         if (!nowInit && !nowReap) return;
         const create = is(ctx, 'CREATE');
@@ -89,11 +204,8 @@ define(['N/record', 'N/runtime', 'N/error', 'N/log', 'N/ui/message',
             M.refreshConditions(rec, cfg);
             M.sync(rec, cfg, M.readHistory(rec));
             log.audit({title: 'FUT Inicio/Reaprobación', details: JSON.stringify({
-                id: rec.id || null,
-                tranid: value(rec, 'tranid'),
-                evento: ctx.type,
-                ciclo: M.readHistory(rec).cycle,
-                form: value(rec, 'customform'),
+                id: rec.id || null, tranid: value(rec, 'tranid'), evento: event,
+                ciclo: M.readHistory(rec).cycle, form: value(rec, 'customform'),
                 condiciones: M.checked(rec).map(x => x.code)
             })});
             return;
@@ -108,7 +220,7 @@ define(['N/record', 'N/runtime', 'N/error', 'N/log', 'N/ui/message',
             !eq(value(old, fieldId), value(rec, fieldId)));
         if ((manualApprovalChange || historyChanged) &&
             !(fromApprovalService && historyChanged)) {
-            C.fail('Los campos de autorización FUT solo pueden modificarse ' +
+            C.fail('Los campos de autorización solo pueden modificarse ' +
                 'mediante los botones Aprobar o Rechazar de la OV.');
         }
         const oldStatus = String(value(old, 'orderstatus') || '');
@@ -117,7 +229,7 @@ define(['N/record', 'N/runtime', 'N/error', 'N/log', 'N/ui/message',
             !(fromApprovalService && historyChanged &&
                 M.allDone(rec, cfg, M.readHistory(rec)))) {
             C.fail('No se puede liberar la orden: faltan validaciones del ' +
-                'proceso comercial FUT. Apruebe desde la propia orden de venta.');
+                'proceso comercial. Apruebe desde la propia orden.');
         }
     }
 
@@ -125,14 +237,13 @@ define(['N/record', 'N/runtime', 'N/error', 'N/log', 'N/ui/message',
         if (!is(ctx, 'CREATE') && !is(ctx, 'EDIT')) return;
         try {
             const id = ctx.newRecord.id;
-            const rec = record.load({type: record.Type.SALES_ORDER,
-                id, isDynamic: false});
+            const rec = loadCurrent(id);
+            if (Close.isClosed(rec)) return; // CIERRE se registra sólo en Suitelet.
             const cfg = C.get();
             if (!controlled(rec, cfg) && !reapproval(rec, cfg)) return;
             const create = is(ctx, 'CREATE');
             const actual = M.readHistory(rec);
             const anterior = create ? null : M.readHistory(ctx.oldRecord);
-            // Las aprobaciones/rechazos del Suitelet no cambian el ciclo.
             if (!create && actual.cycle <= anterior.cycle) return;
             const tipo = create ? 'INICIO' : 'REAPROBACIÓN';
             const estadoAnterior = create ? 'SIN REGISTRO' :
@@ -144,22 +255,16 @@ define(['N/record', 'N/runtime', 'N/error', 'N/log', 'N/ui/message',
                     'niveles. Condiciones actuales: ' +
                     (M.checked(rec).map(r => r.name).join(', ') || 'ninguna');
             H.registrarSeguro({
-                ordenId: id,
-                usuarioId: runtime.getCurrentUser().id,
-                tipo,
-                ciclo: actual.cycle,
-                detalle,
-                estadoAnterior,
+                ordenId: id, usuarioId: runtime.getCurrentUser().id, tipo,
+                ciclo: actual.cycle, detalle, estadoAnterior,
                 estadoNuevo: String(value(rec, 'orderstatus') || '') + '/' + actual.state,
                 origen: 'USER_EVENT',
                 clave: 'FUT_EVT_' + id + '_' + (create ? 'INICIO' : 'REAPROBACION') +
                     '_C' + actual.cycle
             });
         } catch (e) {
-            // La OV ya fue guardada: no presentar su guardado como fallido.
             log.error({title: 'FUT HISTORIAL AFTERSUBMIT', details: String(e.message || e)});
         }
     }
-
     return {beforeLoad, beforeSubmit, afterSubmit};
 });
