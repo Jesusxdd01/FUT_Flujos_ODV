@@ -31,7 +31,15 @@ define(['N/url','N/https','N/ui/dialog'], (url,https,dialog) => {
                 if (resp.code<200 || resp.code>=300) throw Error(errorText(resp));
                 const data=JSON.parse(resp.body);
                 if (!data.ok) throw Error(data.message||'La aprobación no se completó.');
-                window.location.reload();
+                if (data.result && data.result.historialPendiente) {
+                    dialog.alert({
+                        title: 'Aprobación guardada con advertencia',
+                        message: 'La aprobación se guardó, pero no fue posible registrar ' +
+                            'su historial. Avise a soporte para revisar el registro de ejecución.'
+                    }).then(() => window.location.reload());
+                } else {
+                    window.location.reload();
+                }
             }).catch(e=>dialog.alert({title:'No se pudo aprobar',message:String(e.message||e)}))
             .finally(()=>{busy=false;});
         });
