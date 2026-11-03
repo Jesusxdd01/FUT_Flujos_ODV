@@ -1,0 +1,24 @@
+<customlist scriptid="customlist_fut_es_not">
+  <description></description>
+  <isinactive>F</isinactive>
+  <isordered>F</isordered>
+  <name>FUT | Estado Notificaciones OV</name>
+  <customvalues>
+    <customvalue scriptid="val_24127812_4672042_sb1_479">
+      <isinactive>F</isinactive>
+      <value>ENVIADO</value>
+    </customvalue>
+    <customvalue scriptid="val_24127813_4672042_sb1_409">
+      <isinactive>F</isinactive>
+      <value>ERROR</value>
+    </customvalue>
+    <customvalue scriptid="val_24127814_4672042_sb1_143">
+      <isinactive>F</isinactive>
+      <value>NO APLICA</value>
+    </customvalue>
+    <customvalue scriptid="val_24127811_4672042_sb1_951">
+      <isinactive>F</isinactive>
+      <value>PENDIENTE</value>
+    </customvalue>
+  </customvalues>
+</customlist>

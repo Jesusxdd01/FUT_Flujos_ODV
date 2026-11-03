@@ -1,0 +1,32 @@
+<customlist scriptid="customlist_fut_apr_evento">
+  <description></description>
+  <isinactive>F</isinactive>
+  <isordered>F</isordered>
+  <name>FUT | Aprobación Evento</name>
+  <customvalues>
+    <customvalue scriptid="val_24127806_4672042_sb1_151">
+      <isinactive>F</isinactive>
+      <value>APROBACIÓN</value>
+    </customvalue>
+    <customvalue scriptid="val_24127808_4672042_sb1_671">
+      <isinactive>F</isinactive>
+      <value>CIERRE</value>
+    </customvalue>
+    <customvalue scriptid="val_24127804_4672042_sb1_545">
+      <isinactive>F</isinactive>
+      <value>EDICIÓN</value>
+    </customvalue>
+    <customvalue scriptid="val_24127803_4672042_sb1_555">
+      <isinactive>F</isinactive>
+      <value>INICIO</value>
+    </customvalue>
+    <customvalue scriptid="val_24127805_4672042_sb1_320">
+      <isinactive>F</isinactive>
+      <value>REAPROBACIÓN</value>
+    </customvalue>
+    <customvalue scriptid="val_24127807_4672042_sb1_236">
+      <isinactive>F</isinactive>
+      <value>RECHAZO</value>
+    </customvalue>
+  </customvalues>
+</customlist>

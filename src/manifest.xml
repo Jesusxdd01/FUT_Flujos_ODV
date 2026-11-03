@@ -1,4 +1,29 @@
 <manifest projecttype="ACCOUNTCUSTOMIZATION">
-    <projectname>APROBACIONES2</projectname>
-    <frameworkversion>1.0</frameworkversion>
+  <projectname>APROBACIONES2</projectname>
+  <frameworkversion>1.0</frameworkversion>
+  <dependencies>
+    <features>
+      <feature required="true">SERVERSIDESCRIPTING</feature>
+      <feature required="false">MULTILANGUAGE</feature>
+      <feature required="false">EXPREPORTS</feature>
+      <feature required="false">ADVRECEIVING</feature>
+      <feature required="false">MULTILOCINVT</feature>
+      <feature required="false">INVENTORY</feature>
+      <feature required="false">CRM</feature>
+      <feature required="false">CUSTOMTRANSACTIONS</feature>
+      <feature required="false">EXTREMELIST</feature>
+      <feature required="false">RECEIVABLES</feature>
+      <feature required="false">MAILMERGE</feature>
+      <feature required="true">CUSTOMRECORDS</feature>
+      <feature required="false">PAYABLES</feature>
+      <feature required="false">OPPORTUNITIES</feature>
+      <feature required="false">CUSTOMSEGMENTS</feature>
+      <feature required="false">ACCOUNTING</feature>
+      <feature required="false">WEBSTORE</feature>
+      <feature required="false">CREATESUITEBUNDLES</feature>
+    </features>
+    <objects>
+      <object>customlist_apm_list_type_approval</object>
+    </objects>
+  </dependencies>
 </manifest>
