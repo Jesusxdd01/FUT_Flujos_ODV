@@ -1,0 +1,37 @@
+<scheduledscript scriptid="customscript_fut_ss_envio_notif">
+  <description></description>
+  <isinactive>F</isinactive>
+  <name>FUT | Enviar notificaciones OV</name>
+  <notifyadmins>F</notifyadmins>
+  <notifyemails></notifyemails>
+  <notifyowner>T</notifyowner>
+  <scriptfile>[/SuiteScripts/FUT_Aprobaciones_OV/FUT_SS_enviarNotificaciones.js]</scriptfile>
+  <scriptdeployments>
+    <scriptdeployment scriptid="customdeploy_fut_ss_notif_respaldo">
+      <isdeployed>T</isdeployed>
+      <loglevel>DEBUG</loglevel>
+      <status>SCHEDULED</status>
+      <title>FUT | Enviar notificaciones OV 2</title>
+      <recurrence>
+        <everyweekday>
+          <repeat>PT30M</repeat>
+          <startdate>2026-11-04</startdate>
+          <starttime>06:00:00Z</starttime>
+        </everyweekday>
+      </recurrence>
+    </scriptdeployment>
+    <scriptdeployment scriptid="customdeploy_fut_ss_envio_notif">
+      <isdeployed>T</isdeployed>
+      <loglevel>DEBUG</loglevel>
+      <status>NOTSCHEDULED</status>
+      <title>FUT | Enviar notificaciones OV</title>
+      <recurrence>
+        <single>
+          <repeat></repeat>
+          <startdate>2026-11-05</startdate>
+          <starttime>00:00:00Z</starttime>
+        </single>
+      </recurrence>
+    </scriptdeployment>
+  </scriptdeployments>
+</scheduledscript>

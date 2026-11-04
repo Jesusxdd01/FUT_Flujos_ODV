@@ -72,8 +72,21 @@ define(['N/record', 'N/search', 'N/log'], (record, search, log) => {
         poner(rec, 'custrecord_fut_evt_estado_ant', p.estadoAnterior);
         poner(rec, 'custrecord_fut_evt_estado_nvo', p.estadoNuevo);
         poner(rec, 'custrecord_fut_evt_origen', p.origen || 'FUT');
-        // Todavía no enviamos correos en esta etapa.
-        poner(rec, 'custrecord_fut_evt_notif', opcion(LISTA_NOTIF, 'NO APLICA'));
+        // Cada evento captura los destinatarios de las matrices vigentes.
+        // La cola programada enviará sólo a estos destinatarios, aunque las
+        // matrices cambien después de registrar la operación.
+        const envios = Array.isArray(p.envios) ? p.envios.filter(x =>
+            x && Array.isArray(x.destinatarios) && x.destinatarios.length) : [];
+        if (envios.length || p.errorNotificacion) {
+            poner(rec, 'custrecord_fut_evt_dest', JSON.stringify({
+                version: 1, envios, creado: new Date().toISOString(),
+                ultimoError: String(p.errorNotificacion || '')
+            }));
+        }
+        const estadoNotificacion = envios.length ? 'PENDIENTE' :
+            (p.errorNotificacion ? 'ERROR' : 'NO APLICA');
+        poner(rec, 'custrecord_fut_evt_notif', opcion(LISTA_NOTIF,
+            estadoNotificacion));
         const id = rec.save({enableSourcing: false, ignoreMandatoryFields: false});
         log.audit({title: 'FUT HISTORIAL REGISTRADO',
             details: JSON.stringify({id, ordenId: p.ordenId, tipo: p.tipo,
@@ -94,5 +107,5 @@ define(['N/record', 'N/search', 'N/log'], (record, search, log) => {
         }
     }
 
-    return {registrar, registrarSeguro};
+    return {registrar, registrarSeguro, opcionEstado: nombre => opcion(LISTA_NOTIF, nombre)};
 });

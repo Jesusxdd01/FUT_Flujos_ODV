@@ -7,8 +7,9 @@
  */
 define(['N/record', 'N/runtime', 'N/ui/serverWidget', 'N/log', 'N/search',
         './FUT_MD_configAprobaciones', './FUT_MD_motorAprobaciones',
-        './FUT_MD_historialAprobaciones', './FUT_MD_cierreOV'],
-    (record, runtime, ui, log, search, C, M, H, Close) => {
+        './FUT_MD_historialAprobaciones', './FUT_MD_cierreOV',
+        './FUT_MD_notificaciones', './FUT_MD_dispararNotificaciones'],
+    (record, runtime, ui, log, search, C, M, H, Close, N, T) => {
 
     const soId = v => {
         if (!/^\d+$/.test(String(v || '')) || Number(v) <= 0)
@@ -150,33 +151,52 @@ define(['N/record', 'N/runtime', 'N/ui/serverWidget', 'N/log', 'N/search',
         const estadoNuevo = String(val(rec, 'orderstatus')) + '/' + posterior.state;
         const saved = rec.save({enableSourcing: false, ignoreMandatoryFields: false});
         const alertas = [];
+        let requiereCorreo = false;
 
         if (action === 'approve') {
-            nuevasAutorizaciones(anterior, posterior).forEach(item => {
+            const autorizaciones = nuevasAutorizaciones(anterior, posterior);
+            // Notificar al nivel que participó en cada autorización. La
+            // solicitud a la SIGUIENTE matriz sólo se adjunta al último evento.
+            // Así se respeta el orden, incluso si un clic aprobó dos condiciones.
+            const siguiente = M.nextStage(rec, cfg, posterior);
+            autorizaciones.forEach((item, indice) => {
                 const regla = M.RULES.find(r => r.code === item.code);
+                const envios = N.resultado(rec, cfg, item.code, item.level,
+                    'Se registró la aprobación de ' + (regla ? regla.name : item.code) +
+                    ', nivel ' + item.level + '.');
+                if (indice === autorizaciones.length - 1) {
+                    envios.push(...N.solicitud(siguiente,
+                        'La autorización anterior fue completada. Se requiere su aprobación.'));
+                }
                 const salida = H.registrarSeguro({
                     ordenId: saved, usuarioId: usuario, tipo: 'APROBACIÓN',
                     ciclo: posterior.cycle, condicion: item.code, nivel: item.level,
                     detalle: 'Aprobó ' + (regla ? regla.name : item.code) +
                         ', nivel ' + item.level + '.', estadoAnterior, estadoNuevo,
-                    origen: 'SUITELET',
+                    origen: 'SUITELET', envios,
                     clave: 'FUT_EVT_' + saved + '_APROBACION_C' + posterior.cycle +
                         '_COND' + item.code + '_N' + item.level
                 });
                 if (!salida.ok) alertas.push(item.code + '/' + item.level);
+                else if (envios.length) requiereCorreo = true;
             });
         } else {
+            const envios = N.resultado(rec, cfg, etapaAnterior.rule.code,
+                etapaAnterior.level, 'Autorización rechazada. Motivo: ' + motivo.nombre + '.');
             const salida = H.registrarSeguro({
                 ordenId: saved, usuarioId: usuario, tipo: 'RECHAZO',
                 ciclo: posterior.cycle, motivoId: motivo.id,
                 condicion: etapaAnterior.rule.code, nivel: etapaAnterior.level,
                 detalle: 'Rechazo de ' + etapaAnterior.rule.name + ', nivel ' +
                     etapaAnterior.level + '. Motivo: ' + result.reason,
-                estadoAnterior, estadoNuevo, origen: 'SUITELET',
+                estadoAnterior, estadoNuevo, origen: 'SUITELET', envios,
                 clave: 'FUT_EVT_' + saved + '_RECHAZO_C' + posterior.cycle
             });
             if (!salida.ok) alertas.push('RECHAZO');
+            else if (envios.length) requiereCorreo = true;
         }
+        // Una solicitud por clic, incluso si autorizó varias condiciones.
+        if (requiereCorreo) T.solicitar(action + ' OV ' + saved);
         result.historialPendiente = alertas.length > 0;
         log.audit({title: 'FUT - ' + (action === 'approve' ? 'Aprobación' : 'Rechazo'),
             details: JSON.stringify({id: saved, usuario, resultado: result,
@@ -198,6 +218,14 @@ define(['N/record', 'N/runtime', 'N/ui/serverWidget', 'N/log', 'N/search',
         const estadoAnterior = String(val(rec, 'orderstatus') || '') +
             '/' + beforeHistory.state;
         const usuario = uid();
+        // Elegir la última matriz que intervino ANTES de cambiar el estado
+        // a closed. No enviar a todas las matrices históricas.
+        const ultima = N.ultimaMatriz(rec, cfg, beforeHistory);
+        if (ultima) {
+            ultima.detalle = 'La orden fue cerrada definitivamente. Motivo: ' +
+                motivo.nombre + '.';
+        }
+        const envios = ultima ? [ultima] : [];
 
         Close.apply(rec, evaluation);
         const updatedHistory = M.readHistory(rec);
@@ -228,9 +256,10 @@ define(['N/record', 'N/runtime', 'N/ui/serverWidget', 'N/log', 'N/search',
                     ? 'Cierre de líneas y bloqueo definitivo de edición.'
                     : 'Bloqueo definitivo. La orden permanece en estado pendiente ' +
                       'de aprobación, sin posibilidad de autorizarla.'),
-            estadoAnterior, estadoNuevo, origen: 'SUITELET',
+            estadoAnterior, estadoNuevo, origen: 'SUITELET', envios,
             clave: 'FUT_EVT_' + saved + '_CIERRE_C' + beforeHistory.cycle
         });
+        if (salida.ok && envios.length) T.solicitar('CIERRE OV ' + saved);
         log.audit({title: 'FUT CIERRE DEFINITIVO', details: JSON.stringify({
             id: saved, usuario, motivo: motivo.nombre,
             nativeLineClose: evaluation.nativeLineClose,

@@ -246,7 +246,7 @@ define(['N/search', 'N/error', './FUT_MD_configAprobaciones'],
         }
         const text=String(reason||'').trim();
         if (text.length<5 || text.length>1000) C.fail('Indique un motivo de rechazo de 5 a 1000 caracteres.');
-        h.rejections.push({by:String(userId),at:new Date().toISOString(),reason:text,condition:next.rule.code});
+        h.rejections.push({by:String(userId),at:new Date().toISOString(),reason:text,condition:next.rule.code,level:next.level,cycle:h.cycle});
         h.rejections=h.rejections.slice(-30);
         h.done={}; h.state='rejected';
         RULES.forEach(r=>{ put(rec,r.approved,false); if(r.first)put(rec,r.first,false); });
