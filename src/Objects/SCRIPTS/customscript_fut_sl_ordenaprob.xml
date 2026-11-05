@@ -16,9 +16,9 @@
       <eventtype></eventtype>
       <isdeployed>T</isdeployed>
       <isonline>F</isonline>
-      <loglevel>DEBUG</loglevel>
+      <loglevel>ERROR</loglevel>
       <runasrole>ADMINISTRATOR</runasrole>
-      <status>TESTING</status>
+      <status>RELEASED</status>
       <title>FUT_SL_procesarAprobacion</title>
     </scriptdeployment>
   </scriptdeployments>

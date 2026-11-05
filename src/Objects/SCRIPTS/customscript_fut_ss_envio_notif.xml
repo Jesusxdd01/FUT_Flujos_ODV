@@ -9,7 +9,7 @@
   <scriptdeployments>
     <scriptdeployment scriptid="customdeploy_fut_ss_notif_respaldo">
       <isdeployed>T</isdeployed>
-      <loglevel>DEBUG</loglevel>
+      <loglevel>ERROR</loglevel>
       <status>SCHEDULED</status>
       <title>FUT | Enviar notificaciones OV 2</title>
       <recurrence>
@@ -22,7 +22,7 @@
     </scriptdeployment>
     <scriptdeployment scriptid="customdeploy_fut_ss_envio_notif">
       <isdeployed>T</isdeployed>
-      <loglevel>DEBUG</loglevel>
+      <loglevel>ERROR</loglevel>
       <status>NOTSCHEDULED</status>
       <title>FUT | Enviar notificaciones OV</title>
       <recurrence>
