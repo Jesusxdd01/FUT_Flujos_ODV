@@ -15,5 +15,11 @@
       <linktasktype>SCRIPT</linktasktype>
       <shortlist>F</shortlist>
     </link>
+    <link>
+      <linklabel>FUT-Historial de Aprobaciones ODV</linklabel>
+      <linkobject>[scriptid=customsearch_fut_historial_apr_odv]</linkobject>
+      <linktasktype>SRCH_RSLT</linktasktype>
+      <shortlist>F</shortlist>
+    </link>
   </links>
 </centercategory>
