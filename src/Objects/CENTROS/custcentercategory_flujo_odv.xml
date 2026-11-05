@@ -1,0 +1,19 @@
+<centercategory scriptid="custcentercategory_flujo_odv">
+  <center>BASIC</center>
+  <centertab>[scriptid=custcentertab_nso_center_desarrollos]</centertab>
+  <label>Flujo de Aprobaciones ODV</label>
+  <links>
+    <link>
+      <linklabel>Configurar Matrices</linklabel>
+      <linkobject>[scriptid=customscript_fut_sl_cfg_matrices.customdeploy_fut_sl_cfg_matrices]</linkobject>
+      <linktasktype>SCRIPT</linktasktype>
+      <shortlist>F</shortlist>
+    </link>
+    <link>
+      <linklabel>Configurar Flujo</linklabel>
+      <linkobject>[scriptid=customscript_fut_sl_cfg_flujo.customdeploy_fut_sl_cfg_flujo]</linkobject>
+      <linktasktype>SCRIPT</linktasktype>
+      <shortlist>F</shortlist>
+    </link>
+  </links>
+</centercategory>

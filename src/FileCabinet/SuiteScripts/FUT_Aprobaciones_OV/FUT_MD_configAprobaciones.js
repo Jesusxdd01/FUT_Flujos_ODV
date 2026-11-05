@@ -33,19 +33,26 @@ define(['N/search', 'N/error'], (search, error) => {
         return [...new Set(String(value || '').split(/[\s,;]+/)
             .map(x => x.trim()).filter(x => /^\d+$/.test(x) && Number(x) > 0))];
     }
-    function get() {
+    // Únicamente la configuración oficial participa en el flujo.
+    function uniqueRow(columns) {
         const results = search.create({
             type: CFG,
-            filters: [['isinactive','is','F']],
-            columns: [
-                'internalid', FIELD.enabled, FIELD.initial, FIELD.reapprove,
-                FIELD.excluded, FIELD.terms, FIELD.price, FIELD.closeOnReject
-            ]
+            filters: [['name','is','CONFIG_UNICA'],'AND',['isinactive','is','F']],
+            columns: columns
         }).run().getRange({start:0, end:2}) || [];
         if (results.length !== 1) {
-            fail('Debe existir un único registro ACTIVO FUT | Configuración de aprobaciones. Encontrados: ' + results.length);
+            fail('Debe existir exactamente un registro activo con nombre CONFIG_UNICA. Encontrados: ' + results.length);
         }
-        const row = results[0];
+        return results[0];
+    }
+    function getUniqueId() {
+        return Number(uniqueRow(['internalid']).id);
+    }
+    function get() {
+        const row = uniqueRow([
+            'internalid', FIELD.enabled, FIELD.initial, FIELD.reapprove,
+            FIELD.excluded, FIELD.terms, FIELD.price, FIELD.closeOnReject
+        ]);
         const g = name => row.getValue({ name: FIELD[name] });
         if (!isOn(g('enabled'))) fail('La configuración FUT está deshabilitada. No es seguro procesar aprobaciones.');
         const cfg = {
@@ -70,5 +77,5 @@ define(['N/search', 'N/error'], (search, error) => {
         return !!id && !cfg.excluded.includes(id) &&
             (purpose === 'reapprove' ? cfg.reapprove : cfg.initial).includes(id);
     }
-    return { CFG, F, SCRIPT, FIELD, get, idList, isOn, applies, fail };
+    return { CFG, F, SCRIPT, FIELD, get, getUniqueId, idList, isOn, applies, fail };
 });

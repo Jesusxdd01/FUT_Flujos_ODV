@@ -23,6 +23,7 @@
       <feature required="false">CREATESUITEBUNDLES</feature>
     </features>
     <objects>
+      <object>custcentertab_nso_center_desarrollos</object>
       <object>customlist_apm_list_type_approval</object>
     </objects>
   </dependencies>

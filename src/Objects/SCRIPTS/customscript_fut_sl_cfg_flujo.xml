@@ -1,0 +1,25 @@
+<suitelet scriptid="customscript_fut_sl_cfg_flujo">
+  <description></description>
+  <isinactive>F</isinactive>
+  <name>FUT | Configurar Flujo ODV</name>
+  <notifyadmins>F</notifyadmins>
+  <notifyemails></notifyemails>
+  <notifyowner>T</notifyowner>
+  <notifyuser>F</notifyuser>
+  <scriptfile>[/SuiteScripts/FUT_Aprobaciones_OV/FUT_SL_configurarFlujo.js]</scriptfile>
+  <scriptdeployments>
+    <scriptdeployment scriptid="customdeploy_fut_sl_cfg_flujo">
+      <allemployees>F</allemployees>
+      <allpartners>F</allpartners>
+      <allroles>F</allroles>
+      <audslctrole>ADMINISTRATOR</audslctrole>
+      <eventtype></eventtype>
+      <isdeployed>T</isdeployed>
+      <isonline>F</isonline>
+      <loglevel>ERROR</loglevel>
+      <runasrole>ADMINISTRATOR</runasrole>
+      <status>RELEASED</status>
+      <title>FUT | Configurar Flujo ODV</title>
+    </scriptdeployment>
+  </scriptdeployments>
+</suitelet>
