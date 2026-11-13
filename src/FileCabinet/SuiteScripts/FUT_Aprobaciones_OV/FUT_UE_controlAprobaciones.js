@@ -99,7 +99,11 @@ define(['N/record', 'N/runtime', 'N/error', 'N/log', 'N/ui/message',
         // Botón al final únicamente si no ha comenzado surtido o facturación.
         // La validación se vuelve a ejecutar al abrir y enviar el Suitelet.
         let cierreDisponible = false;
-        try { Close.validate(rec, cfg); cierreDisponible = true; }
+        try {
+            Close.validate(rec, cfg);
+            cierreDisponible = Close.usuarioPuedeCerrar(
+                rec, cfg, runtime.getCurrentUser().id);
+        }
         catch (e) { log.audit({title: 'Cierre no disponible',
             details: JSON.stringify({orden: rec.id, motivo: String(e.message || e)})}); }
         if (cierreDisponible) {
@@ -143,6 +147,7 @@ define(['N/record', 'N/runtime', 'N/error', 'N/log', 'N/ui/message',
             }
             // Revalidar incluso si otra Suitelet intentara marcar el candado.
             if (!prior) C.fail('No se pudo verificar el estado anterior de la orden.');
+            Close.exigirAprobador(prior, cfg, runtime.getCurrentUser().id);
             Close.validate(prior, cfg);
             return;
         }

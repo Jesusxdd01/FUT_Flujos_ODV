@@ -44,6 +44,7 @@ define(['N/record', 'N/runtime', 'N/ui/serverWidget', 'N/log', 'N/search',
         let next = null;
         let assessment = null;
         if (closing) {
+            Close.exigirAprobador(rec, cfg, uid());
             assessment = Close.validate(rec, cfg);
         } else {
             ensureAllowed(rec, cfg);
@@ -213,6 +214,9 @@ define(['N/record', 'N/runtime', 'N/ui/serverWidget', 'N/log', 'N/search',
         const motivo = motivoActivo(reasonId);
         const cfg = C.get();
         const rec = load(id);
+        // Verificar de nuevo en POST: el usuario puede haber salido de la
+        // matriz después de abrir el formulario de motivo.
+        Close.exigirAprobador(rec, cfg, uid());
         const evaluation = Close.validate(rec, cfg);
         const beforeHistory = M.readHistory(rec);
         const estadoAnterior = String(val(rec, 'orderstatus') || '') +

@@ -8,8 +8,9 @@
  * Se bloquea operativamente con candado FUT y estado nativo A.
  * En estado B, se cierran las líneas nativas además del candado FUT.
  */
-define(['N/search', './FUT_MD_configAprobaciones', './FUT_MD_motorAprobaciones'],
-    (search, C, M) => {
+define(['N/search', './FUT_MD_configAprobaciones', './FUT_MD_motorAprobaciones',
+        './FUT_MD_notificaciones'],
+    (search, C, M, N) => {
 
     const LOCK = 'custbody_fut_cerrada';
     const val = (rec, fieldId) => rec.getValue({fieldId});
@@ -80,6 +81,69 @@ define(['N/search', './FUT_MD_configAprobaciones', './FUT_MD_motorAprobaciones']
         return {status, count, nativeLineClose: status === 'B'};
     }
 
+
+    // La autorización se consulta de forma dinámica en cada solicitud.
+    // No se usa el creador de la OV ni un rol general como excepción.
+    function etapaAutorizada(rec, cfg) {
+        const h = M.readHistory(rec);
+        const status = String(val(rec, 'orderstatus') || '');
+        if (h.state === 'closed' || isClosed(rec)) return null;
+
+        // Mientras hay autorizaciones pendientes, sólo la etapa vigente
+        // puede cerrar. Es la misma etapa que puede Aprobar/Rechazar.
+        if (h.state === 'active' && status === 'A') {
+            const next = M.nextStage(rec, cfg, h);
+            if (!next || next.blocked || !next.rule || !Array.isArray(next.users)) {
+                return null;
+            }
+            return {
+                condicion: String(next.rule.code),
+                nivel: Number(next.level),
+                usuarios: next.users.map(String)
+            };
+        }
+
+        // Si es un rechazo heredado sin nivel ni ciclo explícitos, no
+        // suponer que correspondía a nivel 1: fallar de forma segura.
+        if (h.state === 'rejected' && status === 'A') {
+            const rechazos = (h.rejections || [])
+                .filter(x => Number(x.cycle) === Number(h.cycle))
+                .sort((a, b) => String(b.at || '').localeCompare(String(a.at || '')));
+            const ultimoRechazo = rechazos[0];
+            if (!ultimoRechazo || !ultimoRechazo.condition ||
+                ![1, 2].includes(Number(ultimoRechazo.level))) return null;
+        }
+
+        // Rechazada: última matriz del rechazo de este ciclo.
+        // Aprobada totalmente: última matriz que autorizó este ciclo.
+        // Reutilizamos la selección empleada para notificar cierres.
+        if ((h.state === 'rejected' && status === 'A') ||
+            (h.state === 'approved' && status === 'B')) {
+            const ultima = N.ultimaMatriz(rec, cfg, h);
+            if (!ultima || !Array.isArray(ultima.destinatarios)) return null;
+            return {
+                condicion: String(ultima.condicion),
+                nivel: Number(ultima.nivel),
+                usuarios: ultima.destinatarios.map(String)
+            };
+        }
+
+        return null;
+    }
+
+    function usuarioPuedeCerrar(rec, cfg, usuarioId) {
+        const etapa = etapaAutorizada(rec, cfg);
+        return !!(etapa && etapa.usuarios.includes(String(usuarioId)));
+    }
+
+    function exigirAprobador(rec, cfg, usuarioId) {
+        if (!usuarioPuedeCerrar(rec, cfg, usuarioId)) {
+            C.fail('No está autorizado para cerrar esta orden. ' +
+                'Sólo los integrantes de la matriz de aprobación correspondiente ' +
+                'pueden realizar esta acción. Actualice la orden y verifique su asignación.');
+        }
+    }
+
     // Debe invocarse únicamente después de validate(), en el mismo registro
     // cargado en modo estándar, y guardarse una sola vez con record.save().
     function apply(rec, assessment) {
@@ -93,5 +157,5 @@ define(['N/search', './FUT_MD_configAprobaciones', './FUT_MD_motorAprobaciones']
         rec.setValue({fieldId: LOCK, value: true});
     }
 
-    return {LOCK, isClosed, validate, apply};
+    return {LOCK, isClosed, validate, apply, etapaAutorizada, usuarioPuedeCerrar, exigirAprobador};
 });
