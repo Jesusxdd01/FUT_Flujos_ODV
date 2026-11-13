@@ -8,6 +8,29 @@ define(['N/url', 'N/https', 'N/ui/dialog'], (url, https, dialog) => {
     const scriptId = 'customscript_fut_sl_ordenAprob';
     const deploymentId = 'customdeploy_fut_sl_ordenAprob';
     let busy = false;
+    // Esta protección se inicia para clientes MOSTRADOR en cualquier formulario.
+    // La restricción solo se activa si el formulario original o actual está EXCLUIDO.
+    let clienteOriginal = '';
+    let formularioOriginal = '';
+    let formulariosExcluidos = new Set();
+    let validarMostrador = false;
+    let restaurandoCliente = false;
+    let avisoAbierto = false;
+    const MSG_MOSTRADOR =
+        'Para evitar inconsistencias con las transacciones relacionadas, ' +
+        'deberá realizar el proceso de devolución, cierre y creación ' +
+        'de una nueva orden de venta.';
+    const igualId = (a, b) => String(a === null || a === undefined ? '' : a) ===
+        String(b === null || b === undefined ? '' : b);
+    function informarCambioNoPermitido() {
+        // Evita ventanas duplicadas durante el sourcing de NetSuite.
+        if (avisoAbierto) return;
+        avisoAbierto = true;
+        dialog.alert({
+            title: 'No es posible modificar el cliente',
+            message: MSG_MOSTRADOR
+        }).catch(() => {}).finally(() => { avisoAbierto = false; });
+    }
 
     function endpoint(params) {
         return url.resolveScript({scriptId, deploymentId,
@@ -83,8 +106,79 @@ define(['N/url', 'N/https', 'N/ui/dialog'], (url, https, dialog) => {
             message: String(e.message || e)
         }));
     }
-    function pageInit(context) {
-        // Entrada necesaria de SuiteScript 2.1. Los botones invocan las funciones.
+    function campoValor(rec, fieldId) {
+        try { return String(rec.getValue({fieldId}) || ''); }
+        catch (e) { return ''; }
     }
-    return {pageInit, futAprobar, futRechazar, futCerrar};
+    function estaExcluido(formId) {
+        return formulariosExcluidos.has(String(formId || ''));
+    }
+    function restriccionAplica(rec) {
+        return validarMostrador &&
+            (estaExcluido(formularioOriginal) ||
+                estaExcluido(campoValor(rec, 'customform')));
+    }
+    function pageInit(context) {
+        // El User Event proporciona el cliente y formulario PERSISTIDOS,
+        // además de la lista de formularios excluidos de CONFIG_UNICA.
+        // Nunca usar el cliente visible como clienteOriginal.
+        clienteOriginal = '';
+        formularioOriginal = '';
+        formulariosExcluidos = new Set();
+        validarMostrador = false;
+        restaurandoCliente = false;
+        if (context.mode !== 'edit') return;
+        const rec = context.currentRecord;
+        clienteOriginal = campoValor(rec, 'custpage_fut_cliente_original');
+        formularioOriginal = campoValor(rec, 'custpage_fut_form_original');
+        const ids = campoValor(rec, 'custpage_fut_forms_excluidos');
+        formulariosExcluidos = new Set(ids.split(',').map(x => x.trim()).filter(Boolean));
+        validarMostrador = !!clienteOriginal && formulariosExcluidos.size > 0;
+    }
+    function restaurarCliente(rec) {
+        if (restaurandoCliente) return;
+        restaurandoCliente = true;
+        try {
+            rec.setValue({
+                fieldId: 'entity', value: clienteOriginal,
+                ignoreFieldChange: true, forceSyncSourcing: true
+            });
+        } catch (e) {
+            // Si el formulario bloquea la restauración, saveRecord evita
+            // guardar el cambio y beforeSubmit conserva el candado final.
+        } finally {
+            restaurandoCliente = false;
+        }
+    }
+    function validateField(context) {
+        if (context.sublistId || context.fieldId !== 'entity' ||
+            !restriccionAplica(context.currentRecord)) return true;
+        // Impide confirmar un cliente diferente ANTES del sourcing nativo.
+        // No depende de pulsar Guardar y no envía la orden al servidor.
+        informarCambioNoPermitido();
+        return false;
+    }
+    function fieldChanged(context) {
+        if (!validarMostrador || restaurandoCliente || context.sublistId) return;
+        const rec = context.currentRecord;
+        if (context.fieldId !== 'entity' && context.fieldId !== 'customform') return;
+        if (!restriccionAplica(rec)) return;
+        if (igualId(campoValor(rec, 'entity'), clienteOriginal)) return;
+        // Respaldo si NetSuite omite validateField por sourcing o por el
+        // selector de formulario. Si se vuelve excluido durante la edición,
+        // también restaura el cliente si este había cambiado previamente.
+        restaurarCliente(rec);
+        informarCambioNoPermitido();
+    }
+    function saveRecord(context) {
+        if (!restriccionAplica(context.currentRecord)) return true;
+        if (igualId(campoValor(context.currentRecord, 'entity'), clienteOriginal)) {
+            return true;
+        }
+        // Última oportunidad de detener el envío desde la UI.
+        informarCambioNoPermitido();
+        return false;
+    }
+    return {pageInit, validateField, fieldChanged, saveRecord,
+        futAprobar, futRechazar, futCerrar};
 });

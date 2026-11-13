@@ -5,11 +5,11 @@
  * Script: customscript_fut_ue_ordenAprob
  * Deploy: customdeploy_fut_ue_ordenAprob
  */
-define(['N/record', 'N/runtime', 'N/error', 'N/log', 'N/ui/message',
+define(['N/record', 'N/runtime', 'N/error', 'N/log', 'N/ui/message', 'N/ui/serverWidget', 'N/search',
         './FUT_MD_configAprobaciones', './FUT_MD_motorAprobaciones',
         './FUT_MD_historialAprobaciones', './FUT_MD_cierreOV',
         './FUT_MD_notificaciones', './FUT_MD_dispararNotificaciones'],
-    (record, runtime, error, log, message, C, M, H, Close, N, T) => {
+    (record, runtime, error, log, message, serverWidget, search, C, M, H, Close, N, T) => {
 
     const F = C.F;
     const eq = (a, b) => String(a === null || a === undefined ? '' : a) ===
@@ -37,7 +37,89 @@ define(['N/record', 'N/runtime', 'N/error', 'N/log', 'N/ui/message',
         return record.load({type: record.Type.SALES_ORDER, id, isDynamic: false});
     }
 
+    // Regla exclusiva para los formularios EXCLUIDOS configurados en CONFIG_UNICA.
+    // No se fija ningún ID de cliente: reconoce entityid o companyname con MOSTRADOR.
+    const MSG_MOSTRADOR =
+        'Para evitar inconsistencias con las transacciones relacionadas, ' +
+        'deberá realizar el proceso de devolución, cierre y creación ' +
+        'de una nueva orden de venta.';
+
+    const normalizarMostrador = x => String(x || '').normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '').toUpperCase();
+
+    function clienteEsMostrador(clienteId) {
+        if (!clienteId) return false;
+        // Ante un fallo de consulta no se presume que el cliente sea estándar:
+        // el error detiene la operación de cambio y evita decisiones inseguras.
+        const datos = search.lookupFields({
+            type: search.Type.CUSTOMER,
+            id: clienteId,
+            columns: ['entityid', 'companyname']
+        });
+        return [datos.entityid, datos.companyname]
+            .some(nombre => normalizarMostrador(nombre).includes('MOSTRADOR'));
+    }
+
+    function excluido(rec, cfg) {
+        return cfg.excluded.includes(String(value(rec, 'customform') || ''));
+    }
+
+    function validarCambioClienteMostrador(ctx, anterior, cfg) {
+        if (!anterior || !(is(ctx, 'EDIT') || is(ctx, 'XEDIT'))) return;
+        if (is(ctx, 'XEDIT') && !ctx.newRecord.getFields().includes('entity')) return;
+        const clienteAntes = value(anterior, 'entity');
+        const clienteAhora = value(ctx.newRecord, 'entity');
+        if (eq(clienteAntes, clienteAhora)) return;
+        // Consulta ambos formularios: no se puede evitar la regla cambiando
+        // simultáneamente de formulario y de cliente en el mismo guardado.
+        if (!excluido(anterior, cfg) && !excluido(ctx.newRecord, cfg)) return;
+        if (clienteEsMostrador(clienteAntes)) {
+            C.fail(MSG_MOSTRADOR);
+        }
+    }
+
     function beforeLoad(ctx) {
+        // El usuario puede cambiar el formulario durante la misma edición.
+        // Por eso el Client Script se instala desde el INICIO en cualquier OV
+        // existente cuyo cliente ORIGINAL sea Mostrador, incluso si hoy usa
+        // un formulario incluido. La RESTRICCIÓN sigue aplicándose únicamente
+        // cuando el formulario original o el seleccionado está EXCLUIDO.
+        if (is(ctx, 'EDIT')) {
+            if (!ctx.newRecord.id) return;
+            const cfg = C.get();
+            if (!cfg.excluded.length) return;
+            const rec = loadCurrent(ctx.newRecord.id);
+            if (!clienteEsMostrador(value(rec, 'entity'))) return;
+
+            function campoOculto(id, etiqueta, contenido) {
+                const f = ctx.form.addField({
+                    id, type: serverWidget.FieldType.TEXT, label: etiqueta
+                });
+                f.defaultValue = String(contenido || '');
+                f.updateDisplayType({displayType: serverWidget.FieldDisplayType.HIDDEN});
+            }
+            // No usar el cliente en pantalla como referencia: NetSuite puede
+            // modificarlo por sourcing al cambiar de formulario.
+            campoOculto('custpage_fut_cliente_original', 'Cliente original FUT',
+                value(rec, 'entity'));
+            campoOculto('custpage_fut_form_original', 'Formulario original FUT',
+                value(rec, 'customform'));
+            campoOculto('custpage_fut_forms_excluidos', 'Formularios excluidos FUT',
+                cfg.excluded.join(','));
+
+            ctx.form.clientScriptModulePath = './FUT_CS_accionesAprobacion.js';
+            // Mostrar aviso al entrar solo cuando YA se está en un formulario
+            // excluido, evitando advertencias en los formularios incluidos.
+            if (excluido(rec, cfg)) {
+                ctx.form.addPageInitMessage({
+                    type: message.Type.WARNING,
+                    title: 'No es posible modificar el cliente',
+                    message: MSG_MOSTRADOR,
+                    duration: 0
+                });
+            }
+            return;
+        }
         if (!is(ctx, 'VIEW')) return;
         const cfg = C.get();
         // En esta cuenta customform no está disponible en ctx.newRecord en VIEW.
@@ -139,6 +221,9 @@ define(['N/record', 'N/runtime', 'N/error', 'N/log', 'N/ui/message',
         }
 
         const cfg = C.get();
+        // Respaldo servidor: también aplica a XEDIT, CSV, integraciones y
+        // cambios por URL que no disparan el Client Script.
+        validarCambioClienteMostrador(ctx, prior, cfg);
         if (Close.isClosed(rec)) {
             // Sólo el Suitelet puede ejecutar la transición FALSE -> TRUE.
             if (!is(ctx, 'EDIT') || runtime.executionContext !== runtime.ContextType.SUITELET) {
