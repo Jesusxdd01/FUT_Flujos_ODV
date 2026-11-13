@@ -129,15 +129,25 @@ define([
             type:ui.FieldType.SELECT,label:'Condición comercial',
             source:'customlist_apm_list_type_approval'});
         const employee=form.addField({id:'custpage_employee',
-            type:ui.FieldType.SELECT,label:'Primer aprobador (nivel 1)',
-            source:'employee'});
+            type:ui.FieldType.SELECT,label:'Primer aprobador (nivel 1)'});
+        employee.addSelectOption({value:'',text:'Seleccione un empleado'});
+        const selectedSub=String(values && values.subsidiary || '');
+        const employeeOptions=selectedSub?A.eligibleEmployees(selectedSub):[];
+        if (selectedSub) {
+            employeeOptions.forEach(opt=>{
+                employee.addSelectOption({value:opt.id,
+                    text:opt.name+(opt.source==='principal'?' (subsidiaria principal)':'')});
+            });
+        }
         subsidiary.isMandatory=true;
         cond.isMandatory=true;
         employee.isMandatory=true;
         if (values) {
             if (values.subsidiary) subsidiary.defaultValue=values.subsidiary;
             if (values.condition) cond.defaultValue=values.condition;
-            if (values.employee) employee.defaultValue=values.employee;
+            if (values.employee && employeeOptions.some(o=>o.id===values.employee)) {
+                employee.defaultValue=values.employee;
+            }
         }
         form.addSubmitButton({label:'Crear matriz'});
         ctx.response.writePage(form);
@@ -167,7 +177,8 @@ define([
             container:'custpage_groupadd'});
         employee.addSelectOption({value:'',text:'Seleccione un empleado'});
         A.eligibleEmployees(matrix.subsidiary).forEach(opt=>
-            employee.addSelectOption({value:opt.id,text:opt.name}));
+            employee.addSelectOption({value:opt.id,
+                text:opt.name+(opt.source==='principal'?' (subsidiaria principal)':'')}));
         const level=form.addField({id:'custpage_level',
             type:ui.FieldType.SELECT,label:'Nivel',container:'custpage_groupadd'});
         level.addSelectOption({value:'1',text:'Nivel 1',isSelected:true});
@@ -273,7 +284,9 @@ define([
             }
             const mode=p(req,'mode') || 'list';
             if (mode==='list') listPage(ctx,{sub:'',cond:''});
-            else if (mode==='new') createPage(ctx);
+            else if (mode==='new') createPage(ctx,{
+                subsidiary:p(req,'custom_subsidiary'),
+                condition:p(req,'custom_condition')});
             else if (mode==='edit') editPage(ctx,p(req,'custom_matrix_id'));
             else A.fail('Pantalla desconocida.');
         } catch(e) {

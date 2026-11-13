@@ -112,22 +112,60 @@ define(['N/record','N/search','N/error','N/log',
                 'seleccionadas. Edite la matriz existente.');
         }
     }
-    function validateEmployees(list) {
-        const union = [...new Set([...(list[1]||[]),...(list[2]||[])])];
-        if (!union.length) fail('El nivel 1 necesita al menos un aprobador.');
-        // Exige empleados activos, pero no cambia permisos ni matrices existentes.
-        const found = new Set();
-        const chunks = [];
-        for (let i=0; i<union.length; i+=150) chunks.push(union.slice(i,i+150));
-        for (const chunk of chunks) {
-            search.create({
-                type: search.Type.EMPLOYEE,
-                filters: [['internalid','anyof',chunk],'AND',['isinactive','is','F']],
-                columns: ['internalid']
-            }).run().each(r => {found.add(String(r.id)); return true;});
+    // La subsidiaria raíz del grupo se obtiene de la jerarquía real,
+    // sin codificar IDs que podrían diferir entre Sandbox y Producción.
+    function getRootSubsidiary(subsidiary) {
+        let current=requiredId(subsidiary,'subsidiaria');
+        const visited=new Set();
+        for (let depth=0; depth<40; depth++) {
+            if (visited.has(current)) {
+                fail('Se detectó una referencia circular en la jerarquía de subsidiarias.');
+            }
+            visited.add(current);
+            const data=search.lookupFields({
+                type:'subsidiary',id:Number(current),columns:['parent']
+            });
+            const parent=data && data.parent;
+            let parentId='';
+            if (Array.isArray(parent)) {
+                parentId=parent.length?String(parent[0].value || ''):'';
+            } else if (parent && typeof parent==='object') {
+                parentId=String(parent.value || '');
+            } else if (parent!==null && parent!==undefined) {
+                parentId=String(parent);
+            }
+            if (!parentId) return current;
+            if (!/^\d+$/.test(parentId)) fail('La subsidiaria padre contiene un ID no válido.');
+            current=parentId;
         }
-        const invalid = union.filter(id => !found.has(id));
-        if (invalid.length) fail('Existen empleados inexistentes o inactivos: '+invalid.join(', '));
+        fail('No fue posible resolver la subsidiaria principal del grupo.');
+    }
+    function allowedSubsidiaries(subsidiary) {
+        const sub=requiredId(subsidiary,'subsidiaria');
+        const root=getRootSubsidiary(sub);
+        return root===sub?[sub]:[sub,root];
+    }
+    function validateEmployees(list,subsidiary) {
+        const union=[...new Set([...(list[1]||[]),...(list[2]||[])])];
+        if (!list[1] || !list[1].length) fail('El nivel 1 necesita al menos un aprobador.');
+        const found=new Set();
+        const allowed=allowedSubsidiaries(subsidiary);
+        for (let i=0; i<union.length; i+=150) {
+            const chunk=union.slice(i,i+150);
+            search.create({
+                type:search.Type.EMPLOYEE,
+                filters:[['internalid','anyof',chunk],'AND',
+                    ['isinactive','is','F'],'AND',
+                    ['subsidiary','anyof',allowed]],
+                columns:['internalid']
+            }).run().each(r=>{found.add(String(r.id));return true;});
+        }
+        const invalid=union.filter(id=>!found.has(id));
+        if (invalid.length) {
+            fail('Empleados inactivos, inexistentes o de subsidiarias no autorizadas: '
+                +invalid.join(', ')+'. Solo se admiten la subsidiaria de la matriz '
+                +'y la subsidiaria principal del grupo.');
+        }
     }
     function saveDetail(matrixId, subsidiary, level, users, existing) {
         if (existing && existing.length > 1) {
@@ -158,7 +196,7 @@ define(['N/record','N/search','N/error','N/log',
                 details:JSON.stringify({matrixId,subsidiary,level,users,error:String(e.message||e)})});
             fail('No se pudo asignar la selección de aprobadores al nivel '+level+
                 '. Verifique que los empleados estén activos y sean elegibles para la '
-                +'subsidiaria de la matriz. El campo de NetSuite aplica un filtro por subsidiaria.');
+                +'subsidiaria de la matriz. Revise que se haya retirado el filtro nativo del multiselect.');
         }
         rec.setValue({fieldId:'isinactive',value:false});
         rec.save({enableSourcing:false,ignoreMandatoryFields:false});
@@ -178,7 +216,7 @@ define(['N/record','N/search','N/error','N/log',
         }
         const levelUsers = {1:ids(input.level1), 2:ids(input.level2)};
         if (!levelUsers[1].length) fail('Seleccione al menos un aprobador para el nivel 1.');
-        validateEmployees(levelUsers);
+        validateEmployees(levelUsers,subsidiary);
         ensureUnique(subsidiary,condition,existingId);
         const current = previous ? previous.details : [];
         const byLevel = {1:[],2:[]};
@@ -279,18 +317,27 @@ define(['N/record','N/search','N/error','N/log',
         return current.id;
     }
 
-    // Empleados elegibles por subsidiaria; el campo multiselect de Netsoft
-    // custrecord_dapm_approval_alternate está filtrado por STDENTITYSUBSIDIARY.
-    // Esta selección evita ofrecer empleados de otra subsidiaria.
+    // Solo empleados activos de la subsidiaria de la matriz o de la
+    // subsidiaria raíz. El selector de NetSuite es manual para conservar
+    // exactamente la misma política que la validación del servidor.
     function eligibleEmployees(subsidiary) {
         const sub=requiredId(subsidiary,'subsidiaria');
+        const allowed=allowedSubsidiaries(sub);
+        const root=allowed[allowed.length-1];
         const rows=[];
         search.create({
-            type: search.Type.EMPLOYEE,
-            filters: [['isinactive','is','F'],'AND',['subsidiary','anyof',sub]],
-            columns: ['internalid','entityid']
+            type:search.Type.EMPLOYEE,
+            filters:[['isinactive','is','F'],'AND',
+                ['subsidiary','anyof',allowed]],
+            columns:['internalid','entityid','subsidiary']
         }).run().each(r=>{
-            rows.push({id:String(r.id),name:String(r.getValue({name:'entityid'}) || ('Empleado '+r.id))});
+            const employeeSub=String(r.getValue({name:'subsidiary'}) || '');
+            const name=String(r.getValue({name:'entityid'}) || ('Empleado '+r.id));
+            rows.push({
+                id:String(r.id),name:name,
+                // Etiqueta informativa; no determina si el empleado es elegible.
+                source:employeeSub===sub?'local':(employeeSub===root?'principal':'autorizado')
+            });
             return true;
         });
         rows.sort((a,b)=>a.name.localeCompare(b.name,'es'));
@@ -298,16 +345,18 @@ define(['N/record','N/search','N/error','N/log',
     }
     function ensureEmployeeEligible(employeeId,subsidiary) {
         const employee=requiredId(employeeId,'empleado');
-        const sub=requiredId(subsidiary,'subsidiaria');
+        const allowed=allowedSubsidiaries(subsidiary);
         const found=search.create({
-            type: search.Type.EMPLOYEE,
+            type:search.Type.EMPLOYEE,
             filters:[['internalid','anyof',employee],'AND',
-                ['isinactive','is','F'],'AND',['subsidiary','anyof',sub]],
+                ['isinactive','is','F'],'AND',
+                ['subsidiary','anyof',allowed]],
             columns:['internalid']
         }).run().getRange({start:0,end:1}) || [];
         if (!found.length) {
-            fail('El empleado seleccionado no está activo o no está asociado a la '
-                +'subsidiaria de esta matriz. Seleccione un aprobador de la lista disponible.');
+            fail('Empleado no autorizado para esta matriz. Solo se pueden agregar '
+                +'empleados activos de la subsidiaria de la matriz o de la '
+                +'subsidiaria principal del grupo.');
         }
     }
     // Actualizar SOLO el nivel afectado, manteniendo intactos los demás.
@@ -324,9 +373,9 @@ define(['N/record','N/search','N/error','N/log',
             log.error({title:'No se pudo modificar el nivel de la matriz',
                 details:JSON.stringify({matriz:matrix.id,nivel:level,users,error:String(e.message||e)})});
             if (e.name==='CONFIGURACION_APROBACIONES_INVALIDA') throw e;
-            fail('No se pudieron guardar los aprobadores. El campo está filtrado '
-                +'por subsidiaria; revise la elegibilidad de los empleados, incluso '
-                +'los que ya estaban asignados. Detalle: '+String(e.message||e));
+            fail('No fue posible guardar los aprobadores. Compruebe que el filtro '
+                +'nativo por subsidiaria esté retirado y revise los datos históricos. '
+                +'Detalle: '+String(e.message||e));
         }
     }
 
@@ -456,5 +505,6 @@ define(['N/record','N/search','N/error','N/log',
     return {ids,fail,listMatrices,getMatrix,saveMatrix,deactivate,
         formsAvailable,getFlow,saveFlow,employeesById,levelUsers,
         addMatrixEmployee,removeMatrixEmployee,createMatrixForEmployee,eligibleEmployees,
+        getRootSubsidiary,allowedSubsidiaries,ensureEmployeeEligible,
         addFlowForm,removeFlowForm,FLOW_GROUPS};
 });

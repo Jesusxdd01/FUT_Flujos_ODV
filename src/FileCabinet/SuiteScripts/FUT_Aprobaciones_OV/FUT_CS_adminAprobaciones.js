@@ -76,6 +76,17 @@ define(['N/ui/dialog','N/https','N/url','N/currentRecord'],(dialog,https,url,cur
             });
         }).catch(notifyError).finally(()=>{working=false;});
     }
+    function fieldChanged(context) {
+        // En creación de matrices, recargar los candidatos cuando cambia
+        // la subsidiaria. El servidor construye una lista restringida.
+        if (context.fieldId!=='custpage_subsidiary') return;
+        const rec=context.currentRecord;
+        const sub=String(rec.getValue({fieldId:'custpage_subsidiary'}) || '');
+        const cond=String(rec.getValue({fieldId:'custpage_condition'}) || '');
+        navigation(MATRIX_SCRIPT,MATRIX_DEPLOY,{
+            mode:'new',custom_subsidiary:sub,custom_condition:cond
+        });
+    }
     function pageInit(){
         // Los enlaces en sublistas LIST no admiten functionName.
         // Se escucha solamente en los enlaces del administrador.
@@ -94,5 +105,5 @@ define(['N/ui/dialog','N/https','N/url','N/currentRecord'],(dialog,https,url,cur
         // La misma ruta confirmada que utilizan los enlaces de las tablas.
         confirmAndSend(actionInfo({getAttribute:k=>k==='data-fut-action'?'disableMatrix':id}));
     }
-    return {pageInit,futVolverMatrices,futNuevaMatriz,futDesactivarMatriz};
+    return {pageInit,fieldChanged,futVolverMatrices,futNuevaMatriz,futDesactivarMatriz};
 });
