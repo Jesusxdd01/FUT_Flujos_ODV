@@ -21,6 +21,62 @@ define(['N/record', 'N/runtime', 'N/ui/serverWidget', 'N/log', 'N/search',
     const val = (rec, id) => rec.getValue({fieldId: id});
     const uid = () => String(runtime.getCurrentUser().id);
 
+    // Ruta independiente de las matrices; licitaciones usan otro proceso.
+    function aprobacionGeneral(rec, cfg) {
+        return !M.isOn(val(rec, 'custbody_licitacion')) &&
+            (!C.applies(rec, cfg, 'initial') || M.checked(rec).length === 0);
+    }
+
+    function processGeneralApproval(rec, cfg) {
+        if (Close.isClosed(rec)) C.fail('La orden está cerrada definitivamente.');
+        if (!aprobacionGeneral(rec, cfg)) {
+            C.fail('La orden requiere aprobación mediante las matrices comerciales.');
+        }
+        if (String(val(rec, 'orderstatus') || '') !== 'A') {
+            C.fail('La orden ya no está pendiente de aprobación. Actualice su pantalla.');
+        }
+        const usuario = uid();
+        if (!/^\d+$/.test(usuario) || Number(usuario) <= 0) {
+            C.fail('Se requiere un usuario autenticado para aprobar la orden.');
+        }
+        const h = M.readHistory(rec);
+        if (h.state === 'closed' || h.state === 'rejected') {
+            C.fail('La orden está cerrada o rechazada y no admite esta aprobación.');
+        }
+        const estadoAnterior = 'A/' + h.state;
+        h.state = 'approved';
+        h.generalApproval = {
+            state: 'approved',
+            by: usuario,
+            at: new Date().toISOString()
+        };
+        M.writeHistory(rec, h);
+        rec.setValue({fieldId: 'orderstatus', value: 'B'});
+        rec.setValue({fieldId: C.F.next, value: []});
+        rec.setValue({fieldId: C.F.level, value: null});
+        const saved = rec.save({enableSourcing: false, ignoreMandatoryFields: false});
+        // Se utiliza el tipo APROBACIÓN ya existente en el catálogo de historial.
+        const salida = H.registrarSeguro({
+            ordenId: saved,
+            usuarioId: usuario,
+            tipo: 'APROBACIÓN',
+            ciclo: h.cycle,
+            detalle: 'Aprobación general, sin aplicación de matrices comerciales.',
+            estadoAnterior,
+            estadoNuevo: 'B/approved',
+            origen: 'SUITELET',
+            clave: 'FUT_EVT_' + saved + '_APROBACION_GENERAL_C' + h.cycle
+        });
+        log.audit({title: 'FUT APROBACIÓN GENERAL', details: JSON.stringify({
+            orden: saved, usuario, ciclo: h.cycle, historialRegistrado: salida.ok
+        })});
+        return {
+            complete: true,
+            actions: ['Aprobación general'],
+            historialPendiente: !salida.ok
+        };
+    }
+
     function ensureAllowed(rec, cfg) {
         if (Close.isClosed(rec)) {
             C.fail('Esta orden está cerrada definitivamente. No admite nuevas aprobaciones ni rechazos.');
@@ -139,6 +195,9 @@ define(['N/record', 'N/runtime', 'N/ui/serverWidget', 'N/log', 'N/search',
     function processApproval(id, action, reasonId) {
         const cfg = C.get();
         const rec = load(id);
+        if (action === 'approve' && aprobacionGeneral(rec, cfg)) {
+            return processGeneralApproval(rec, cfg);
+        }
         ensureAllowed(rec, cfg);
         const usuario = uid();
         const anterior = M.readHistory(rec);

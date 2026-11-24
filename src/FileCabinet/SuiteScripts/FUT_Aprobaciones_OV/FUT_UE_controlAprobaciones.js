@@ -20,6 +20,26 @@ define(['N/record', 'N/runtime', 'N/error', 'N/log', 'N/ui/message', 'N/ui/serve
     const reapproval = (rec, cfg) => nonTender(rec) && C.applies(rec, cfg, 'reapprove');
     const value = (rec, id) => rec.getValue({fieldId: id});
 
+    // Sin matrices: todo usuario con acceso a la OV puede aprobar desde el botón FUT.
+    // Las licitaciones conservan su flujo independiente.
+    function aprobacionGeneral(rec, cfg) {
+        return nonTender(rec) &&
+            (!controlled(rec, cfg) || M.checked(rec).length === 0);
+    }
+
+    function iniciarAprobacionGeneral(rec, h) {
+        h.state = 'active';
+        h.generalApproval = {
+            state: 'pending',
+            requestedAt: new Date().toISOString()
+        };
+        M.writeHistory(rec, h);
+        rec.setValue({fieldId: 'orderstatus', value: 'A'});
+        rec.setValue({fieldId: F.next, value: []});
+        rec.setValue({fieldId: F.level, value: null});
+    }
+
+
     function nativeBlocked(rec) {
         const tranid = value(rec, 'tranid') || rec.id || '';
         throw error.create({
@@ -96,65 +116,6 @@ define(['N/record', 'N/runtime', 'N/error', 'N/log', 'N/ui/message', 'N/ui/serve
         }
     }
 
-    // Diagnóstico temporal para Sandbox: registrar el criterio aplicado al cambio de cliente.
-    // El bloqueo funcional continúa en validarCambioClienteMostrador.
-    function diagnosticarCambioCliente(ctx, anterior, cfg) {
-        if (!anterior || !(is(ctx, 'EDIT') || is(ctx, 'XEDIT'))) return;
-        if (is(ctx, 'XEDIT') && !ctx.newRecord.getFields().includes('entity')) return;
-
-        const clienteAnterior = String(value(anterior, 'entity') || '');
-        const clienteNuevo = String(value(ctx.newRecord, 'entity') || '');
-        if (clienteAnterior === clienteNuevo) return;
-
-        const formularioAnterior = String(value(anterior, 'customform') || '');
-        const camposActuales = is(ctx, 'XEDIT') ? ctx.newRecord.getFields() : null;
-        const formularioNuevo = camposActuales && !camposActuales.includes('customform')
-            ? formularioAnterior : String(value(ctx.newRecord, 'customform') || '');
-        const formularioCoincide = cfg.excluded.includes(formularioAnterior) ||
-            cfg.excluded.includes(formularioNuevo);
-
-        let terminosCliente = '';
-        let nivelPrecioCliente = '';
-        let errorConsulta = '';
-        try {
-            const datos = search.lookupFields({
-                type: search.Type.CUSTOMER,
-                id: clienteAnterior,
-                columns: ['terms', 'pricelevel']
-            });
-            terminosCliente = idCampoSeleccion(datos.terms);
-            nivelPrecioCliente = idCampoSeleccion(datos.pricelevel);
-        } catch (e) {
-            errorConsulta = String(e.message || e);
-        }
-
-        const terminosCoinciden = !!cfg.lockTerms &&
-            terminosCliente === String(cfg.lockTerms);
-        const precioCoincide = !!cfg.lockPrice &&
-            nivelPrecioCliente === String(cfg.lockPrice);
-        log.audit({
-            title: 'FUT_DIAGNOSTICO_CAMBIO_CLIENTE',
-            details: JSON.stringify({
-                orden: ctx.newRecord.id || null,
-                evento: ctx.type,
-                clienteAnterior,
-                clienteNuevo,
-                formularioAnterior,
-                formularioNuevo,
-                formulariosExcluidosConfigurados: cfg.excluded,
-                formularioCoincide,
-                terminosCliente,
-                terminosProtegidosConfigurados: cfg.lockTerms,
-                terminosCoinciden,
-                nivelPrecioCliente,
-                nivelPrecioProtegidoConfigurado: cfg.lockPrice,
-                precioCoincide,
-                bloqueoEsperado: formularioCoincide && terminosCoinciden && precioCoincide,
-                errorConsulta
-            })
-        });
-    }
-
     function beforeLoad(ctx) {
         // El Client Script se instala desde la edición para impedir que cambiar
         // formulario y cliente en una misma sesión eluda la validación visual.
@@ -228,33 +189,44 @@ define(['N/record', 'N/runtime', 'N/error', 'N/log', 'N/ui/message', 'N/ui/serve
             try { ctx.form.removeButton({id: 'approve'}); } catch (e) {}
             return;
         }
-        if (!aplica) return;
+        const general = aprobacionGeneral(rec, cfg);
+        if (!aplica && !general) return;
         const status = String(value(rec, 'orderstatus') || '');
         if (status !== 'A' && status !== 'B') return;
 
         ctx.form.clientScriptModulePath = './FUT_CS_accionesAprobacion.js';
         if (status === 'A') {
-            const hist = M.readHistory(rec);
-            const next = M.nextStage(rec, cfg, hist);
-            if (next && next.blocked) {
-                ctx.form.addPageInitMessage({
-                    type: message.Type.WARNING,
-                    title: hist.state === 'rejected' ? 'Edición pendiente' :
-                        'Configuración de aprobación pendiente',
-                    message: next.reason,
-                    duration: 10000
-                });
-            } else if (next && next.users.includes(String(runtime.getCurrentUser().id))) {
+            if (general) {
+                // También cubre OV antiguas devueltas manualmente a Pendiente.
+                try { ctx.form.removeButton({id: 'approve'}); } catch (e) {}
                 ctx.form.addButton({
                     id: 'custpage_fut_aprobar', label: 'Aprobar',
                     functionName: 'futAprobar(' + Number(rec.id) + ')'
                 });
-                ctx.form.addButton({
-                    id: 'custpage_fut_rechazar', label: 'Rechazar',
-                    functionName: 'futRechazar(' + Number(rec.id) + ')'
-                });
+            } else {
+                const hist = M.readHistory(rec);
+                const next = M.nextStage(rec, cfg, hist);
+                if (next && next.blocked) {
+                    ctx.form.addPageInitMessage({
+                        type: message.Type.WARNING,
+                        title: hist.state === 'rejected' ? 'Edición pendiente' :
+                            'Configuración de aprobación pendiente',
+                        message: next.reason,
+                        duration: 10000
+                    });
+                } else if (next && next.users.includes(String(runtime.getCurrentUser().id))) {
+                    ctx.form.addButton({
+                        id: 'custpage_fut_aprobar', label: 'Aprobar',
+                        functionName: 'futAprobar(' + Number(rec.id) + ')'
+                    });
+                    ctx.form.addButton({
+                        id: 'custpage_fut_rechazar', label: 'Rechazar',
+                        functionName: 'futRechazar(' + Number(rec.id) + ')'
+                    });
+                }
             }
         }
+        if (!aplica) return;
         // Botón al final únicamente si no ha comenzado surtido o facturación.
         // La validación se vuelve a ejecutar al abrir y enviar el Suitelet.
         let cierreDisponible = false;
@@ -301,7 +273,6 @@ define(['N/record', 'N/runtime', 'N/error', 'N/log', 'N/ui/message', 'N/ui/serve
         // El cliente anterior se obtiene de oldRecord o del registro persistido
         // en XEDIT; funciona sin importar el rol del usuario.
         const cfg = C.get();
-        diagnosticarCambioCliente(ctx, prior, cfg);
         validarCambioClienteMostrador(ctx, prior, cfg);
         if (Close.isClosed(rec)) {
             // Sólo el Suitelet puede ejecutar la transición FALSE -> TRUE.
@@ -317,12 +288,18 @@ define(['N/record', 'N/runtime', 'N/error', 'N/log', 'N/ui/message', 'N/ui/serve
         }
 
         if (is(ctx, 'APPROVE') || is(ctx, 'REJECT')) {
-            const base = old || rec;
-            if (controlled(base, cfg) && M.checked(base).length) nativeBlocked(base);
+            const base = prior || old || rec;
+            // No se permite omitir el historial FUT mediante la aprobación nativa.
+            if (aprobacionGeneral(base, cfg) ||
+                (controlled(base, cfg) && M.checked(base).length)) nativeBlocked(base);
             return;
         }
         if (is(ctx, 'XEDIT')) {
             const stored = prior || loadCurrent(rec.id);
+            if (aprobacionGeneral(stored, cfg) &&
+                rec.getFields().includes('orderstatus')) {
+                C.fail('Apruebe desde el botón Aprobar de la orden de venta.');
+            }
             if (!controlled(stored, cfg) && !reapproval(stored, cfg)) return;
             const unsafe = new Set(['entity', 'total', 'customform', 'orderstatus',
                 F.history, F.level, F.next]
@@ -334,24 +311,66 @@ define(['N/record', 'N/runtime', 'N/error', 'N/log', 'N/ui/message', 'N/ui/serve
             return;
         }
         if (!is(ctx, 'CREATE') && !is(ctx, 'EDIT')) return;
+
+        // Evita liberar manualmente una OV que requiere aprobación general.
+        if (is(ctx, 'EDIT') && prior &&
+            String(value(prior, 'orderstatus') || '') === 'A' &&
+            String(value(rec, 'orderstatus') || '') === 'B' &&
+            aprobacionGeneral(prior, cfg)) {
+            const h = M.readHistory(rec);
+            const cambioHistorial = !eq(value(prior, F.history), value(rec, F.history));
+            const valido = runtime.executionContext === runtime.ContextType.SUITELET &&
+                cambioHistorial && h.state === 'approved' &&
+                h.generalApproval && h.generalApproval.state === 'approved' &&
+                !!h.generalApproval.by;
+            if (!valido) C.fail('Para liberar esta orden utilice el botón Aprobar de FUT.');
+        }
+
         const nowInit = controlled(rec, cfg);
         const nowReap = reapproval(rec, cfg);
         const previouslyControlled = old && (controlled(old, cfg) || reapproval(old, cfg));
         if (previouslyControlled && !nowInit && !nowReap) C.fail(
             'No se permite cambiar esta orden a un formulario fuera del proceso de autorización ' +
             'mediante edición ordinaria. Consulte al administrador.');
-        if (!nowInit && !nowReap) return;
         const create = is(ctx, 'CREATE');
+
+        // Las OV fuera de las matrices se crean pendientes, aunque tengan checks activos.
+        if (create && !nowInit) {
+            if (aprobacionGeneral(rec, cfg)) {
+                const h = M.resetApprovals(rec, M.blankHistory(), true);
+                iniciarAprobacionGeneral(rec, h);
+            }
+            return;
+        }
+
+        // Permite reiniciar el ciclo si una OV general ya liberada vuelve a Pendiente.
+        if (!create && prior &&
+            String(value(prior, 'orderstatus') || '') === 'B' &&
+            String(value(rec, 'orderstatus') || '') === 'A' &&
+            aprobacionGeneral(rec, cfg)) {
+            const h = M.resetApprovals(rec, M.readHistory(prior), false);
+            iniciarAprobacionGeneral(rec, h);
+            return;
+        }
+
+        if (!nowInit && !nowReap) return;
         const changed = create || (old && nowReap && M.changed(old, rec, false));
         if (changed) {
             const previous = create ? M.blankHistory() : M.readHistory(rec);
             M.resetApprovals(rec, previous, create);
-            M.refreshConditions(rec, cfg);
-            M.sync(rec, cfg, M.readHistory(rec));
+            // Las condiciones comerciales se calculan únicamente para los
+            // formularios que entran al flujo de matrices.
+            if (nowInit) M.refreshConditions(rec, cfg);
+            if (aprobacionGeneral(rec, cfg)) {
+                iniciarAprobacionGeneral(rec, M.readHistory(rec));
+            } else {
+                M.sync(rec, cfg, M.readHistory(rec));
+            }
             log.audit({title: 'FUT Inicio/Reaprobación', details: JSON.stringify({
                 id: rec.id || null, tranid: value(rec, 'tranid'), evento: event,
                 ciclo: M.readHistory(rec).cycle, form: value(rec, 'customform'),
-                condiciones: M.checked(rec).map(x => x.code)
+                condiciones: M.checked(rec).map(x => x.code),
+                modo: aprobacionGeneral(rec, cfg) ? 'GENERAL' : 'MATRICES'
             })});
             return;
         }

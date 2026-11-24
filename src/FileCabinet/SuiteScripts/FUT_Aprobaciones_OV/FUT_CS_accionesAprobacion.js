@@ -77,8 +77,8 @@ define(['N/url', 'N/https', 'N/ui/dialog'], (url, https, dialog) => {
     function futAprobar(id) {
         if (busy) return;
         dialog.confirm({title: 'Autorizar orden de venta',
-            message: 'Se registrarán las autorizaciones comerciales para las que ' +
-                'usted esté habilitado en la matriz vigente. ¿Continuar?'
+            message: 'Se aprobará la orden según el flujo que corresponda: ' +
+                'general o comercial por matrices. ¿Continuar?'
         }).then(yes => {
             if (!yes || busy) return;
             busy = true;
