@@ -28,6 +28,12 @@ define(['N/search', 'N/error', './FUT_MD_configAprobaciones'],
         }
         return n;
     };
+    // Un campo numérico opcional vacío no debe tratarse como un valor corrupto.
+    // Si un campo sí contiene información, num() conserva la validación estricta.
+    const vacio = v => v === null || v === undefined ||
+        (typeof v === 'string' && v.trim() === '');
+    const numOrZero = (v, field) => vacio(v) ? 0 : num(v, field);
+
     const sel = v => Array.isArray(v) ? (v[0] ? String(v[0].value) : '')
         : v && typeof v === 'object' ? String(v.value || '') : String(v || '');
     const checked = rec => RULES.filter(r => isOn(get(rec, r.condition)));
@@ -64,20 +70,30 @@ define(['N/search', 'N/error', './FUT_MD_configAprobaciones'],
                 '. Revise los permisos y campos de búsqueda. Detalle: ' + e.message);
         }
         const terms = sel(x.terms), price = sel(x.pricelevel);
-        if (!terms || !price) C.fail('No se obtuvieron términos o nivel de precio del cliente ' + entity + '.');
+        // Los campos comerciales vacíos no deben impedir guardar una OV.
+        // Si no coinciden con los valores base, la condición comercial 6 se activa
+        // y se somete al flujo de aprobación correspondiente, cuando aplique.
         const total = num(get(rec,'total'), 'total de OV');
-        const balance = num(x.consolbalance, 'consolbalance');
-        const limit = num(x.creditlimit, 'creditlimit');
-        const days = num(x.daysoverdue, 'daysoverdue');
+        // Si no hay saldo o días vencidos, esos indicadores equivalen a cero.
+        const balance = numOrZero(x.consolbalance, 'consolbalance');
+        const days = numOrZero(x.daysoverdue, 'daysoverdue');
+        // Límite SIN CONFIGURAR es distinto de un límite explícito de 0.
+        const limit = vacio(x.creditlimit) ? null : num(x.creditlimit, 'creditlimit');
         return { terms, price, total, balance, limit, days };
     }
     // Mismo concepto original de Netsoft, con limpieza de condiciones automáticas que ya no aplican.
     function refreshConditions(rec, cfg) {
         const x = customerInfo(rec, cfg);
         put(rec, 'custbody_nos_fut_level_price', x.terms !== cfg.baseTerms || x.price !== cfg.basePrice);
-        put(rec, 'custbody_nos_fut_credit_exceeded', x.balance + x.total > x.limit);
+        // Sólo hay crédito excedido si existe un límite numérico configurado.
+        // Un campo vacío no debe transformarse en límite 0 para esta comparación.
+        put(rec, 'custbody_nos_fut_credit_exceeded',
+            x.limit !== null && x.balance + x.total > x.limit);
         put(rec, 'custbody_nso_fut_expiration_days', x.days > 0);
-        put(rec, 'custbody_nso_limite_credito', x.limit);
+        // Campo custom numérico: se escribe 0 como representación técnica de
+        // "no configurado". NO usar este campo para inferir la política crediticia;
+        // la regla de excedido utiliza x.limit (null cuando está sin definir).
+        put(rec, 'custbody_nso_limite_credito', x.limit === null ? 0 : x.limit);
         put(rec, 'custbody_nso_limite_credito_actual', x.balance + x.total);
     }
 

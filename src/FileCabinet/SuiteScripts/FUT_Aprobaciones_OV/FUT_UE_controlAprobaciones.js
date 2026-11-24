@@ -37,27 +37,38 @@ define(['N/record', 'N/runtime', 'N/error', 'N/log', 'N/ui/message', 'N/ui/serve
         return record.load({type: record.Type.SALES_ORDER, id, isDynamic: false});
     }
 
-    // Regla exclusiva para los formularios EXCLUIDOS configurados en CONFIG_UNICA.
-    // No se fija ningún ID de cliente: reconoce entityid o companyname con MOSTRADOR.
+    // Restricción de cambio de cliente en los formularios excluidos de CONFIG_UNICA.
+    // El perfil protegido usa lockTerms y lockPrice, no baseTerms ni basePrice.
+    // Se compara por IDs internos configurados, no por etiquetas.
+    // Se evalúa únicamente el cliente previamente guardado en la OV.
     const MSG_MOSTRADOR =
         'Para evitar inconsistencias con las transacciones relacionadas, ' +
         'deberá realizar el proceso de devolución, cierre y creación ' +
         'de una nueva orden de venta.';
 
-    const normalizarMostrador = x => String(x || '').normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '').toUpperCase();
+    function idCampoSeleccion(valor) {
+        if (Array.isArray(valor)) {
+            return valor.length ? idCampoSeleccion(valor[0]) : '';
+        }
+        if (valor && typeof valor === 'object') {
+            return String(valor.value || '');
+        }
+        return String(valor || '');
+    }
 
-    function clienteEsMostrador(clienteId) {
-        if (!clienteId) return false;
-        // Ante un fallo de consulta no se presume que el cliente sea estándar:
-        // el error detiene la operación de cambio y evita decisiones inseguras.
+    function clienteEsPerfilMostrador(clienteId, cfg) {
+        // Sin cliente o sin ambos criterios protegidos, no se aplica la restricción.
+        if (!clienteId || !cfg.lockTerms || !cfg.lockPrice) return false;
         const datos = search.lookupFields({
             type: search.Type.CUSTOMER,
             id: clienteId,
-            columns: ['entityid', 'companyname']
+            columns: ['terms', 'pricelevel']
         });
-        return [datos.entityid, datos.companyname]
-            .some(nombre => normalizarMostrador(nombre).includes('MOSTRADOR'));
+        const terminosId = idCampoSeleccion(datos.terms);
+        const precioId = idCampoSeleccion(datos.pricelevel);
+        return !!terminosId && !!precioId &&
+            terminosId === cfg.lockTerms &&
+            precioId === cfg.lockPrice;
     }
 
     function excluido(rec, cfg) {
@@ -65,31 +76,95 @@ define(['N/record', 'N/runtime', 'N/error', 'N/log', 'N/ui/message', 'N/ui/serve
     }
 
     function validarCambioClienteMostrador(ctx, anterior, cfg) {
+        // CREATE no tiene cliente previamente guardado: no aplica la restricción.
         if (!anterior || !(is(ctx, 'EDIT') || is(ctx, 'XEDIT'))) return;
+        // XEDIT puede incluir solamente los campos modificados.
         if (is(ctx, 'XEDIT') && !ctx.newRecord.getFields().includes('entity')) return;
+
         const clienteAntes = value(anterior, 'entity');
         const clienteAhora = value(ctx.newRecord, 'entity');
         if (eq(clienteAntes, clienteAhora)) return;
-        // Consulta ambos formularios: no se puede evitar la regla cambiando
-        // simultáneamente de formulario y de cliente en el mismo guardado.
+
+        // Se considera el formulario anterior o el nuevo para que no pueda
+        // omitirse la restricción cambiando formulario y cliente a la vez.
+        // En XEDIT, si customform no viene en el registro parcial, se usa el anterior.
         if (!excluido(anterior, cfg) && !excluido(ctx.newRecord, cfg)) return;
-        if (clienteEsMostrador(clienteAntes)) {
+
+        // Sólo importa el cliente ANTERIOR. No consultar ni evaluar el nuevo.
+        if (clienteEsPerfilMostrador(clienteAntes, cfg)) {
             C.fail(MSG_MOSTRADOR);
         }
     }
 
+    // Diagnóstico temporal para Sandbox: registrar el criterio aplicado al cambio de cliente.
+    // El bloqueo funcional continúa en validarCambioClienteMostrador.
+    function diagnosticarCambioCliente(ctx, anterior, cfg) {
+        if (!anterior || !(is(ctx, 'EDIT') || is(ctx, 'XEDIT'))) return;
+        if (is(ctx, 'XEDIT') && !ctx.newRecord.getFields().includes('entity')) return;
+
+        const clienteAnterior = String(value(anterior, 'entity') || '');
+        const clienteNuevo = String(value(ctx.newRecord, 'entity') || '');
+        if (clienteAnterior === clienteNuevo) return;
+
+        const formularioAnterior = String(value(anterior, 'customform') || '');
+        const camposActuales = is(ctx, 'XEDIT') ? ctx.newRecord.getFields() : null;
+        const formularioNuevo = camposActuales && !camposActuales.includes('customform')
+            ? formularioAnterior : String(value(ctx.newRecord, 'customform') || '');
+        const formularioCoincide = cfg.excluded.includes(formularioAnterior) ||
+            cfg.excluded.includes(formularioNuevo);
+
+        let terminosCliente = '';
+        let nivelPrecioCliente = '';
+        let errorConsulta = '';
+        try {
+            const datos = search.lookupFields({
+                type: search.Type.CUSTOMER,
+                id: clienteAnterior,
+                columns: ['terms', 'pricelevel']
+            });
+            terminosCliente = idCampoSeleccion(datos.terms);
+            nivelPrecioCliente = idCampoSeleccion(datos.pricelevel);
+        } catch (e) {
+            errorConsulta = String(e.message || e);
+        }
+
+        const terminosCoinciden = !!cfg.lockTerms &&
+            terminosCliente === String(cfg.lockTerms);
+        const precioCoincide = !!cfg.lockPrice &&
+            nivelPrecioCliente === String(cfg.lockPrice);
+        log.audit({
+            title: 'FUT_DIAGNOSTICO_CAMBIO_CLIENTE',
+            details: JSON.stringify({
+                orden: ctx.newRecord.id || null,
+                evento: ctx.type,
+                clienteAnterior,
+                clienteNuevo,
+                formularioAnterior,
+                formularioNuevo,
+                formulariosExcluidosConfigurados: cfg.excluded,
+                formularioCoincide,
+                terminosCliente,
+                terminosProtegidosConfigurados: cfg.lockTerms,
+                terminosCoinciden,
+                nivelPrecioCliente,
+                nivelPrecioProtegidoConfigurado: cfg.lockPrice,
+                precioCoincide,
+                bloqueoEsperado: formularioCoincide && terminosCoinciden && precioCoincide,
+                errorConsulta
+            })
+        });
+    }
+
     function beforeLoad(ctx) {
-        // El usuario puede cambiar el formulario durante la misma edición.
-        // Por eso el Client Script se instala desde el INICIO en cualquier OV
-        // existente cuyo cliente ORIGINAL sea Mostrador, incluso si hoy usa
-        // un formulario incluido. La RESTRICCIÓN sigue aplicándose únicamente
-        // cuando el formulario original o el seleccionado está EXCLUIDO.
+        // El Client Script se instala desde la edición para impedir que cambiar
+        // formulario y cliente en una misma sesión eluda la validación visual.
+        // El bloqueo definitivo se ejecuta en beforeSubmit.
         if (is(ctx, 'EDIT')) {
             if (!ctx.newRecord.id) return;
             const cfg = C.get();
             if (!cfg.excluded.length) return;
             const rec = loadCurrent(ctx.newRecord.id);
-            if (!clienteEsMostrador(value(rec, 'entity'))) return;
+            if (!clienteEsPerfilMostrador(value(rec, 'entity'), cfg)) return;
 
             function campoOculto(id, etiqueta, contenido) {
                 const f = ctx.form.addField({
@@ -98,6 +173,7 @@ define(['N/record', 'N/runtime', 'N/error', 'N/log', 'N/ui/message', 'N/ui/serve
                 f.defaultValue = String(contenido || '');
                 f.updateDisplayType({displayType: serverWidget.FieldDisplayType.HIDDEN});
             }
+            // Estos campos también son consumidos por saveRecord del Client Script.
             // No usar el cliente en pantalla como referencia: NetSuite puede
             // modificarlo por sourcing al cambiar de formulario.
             campoOculto('custpage_fut_cliente_original', 'Cliente original FUT',
@@ -108,8 +184,9 @@ define(['N/record', 'N/runtime', 'N/error', 'N/log', 'N/ui/message', 'N/ui/serve
                 cfg.excluded.join(','));
 
             ctx.form.clientScriptModulePath = './FUT_CS_accionesAprobacion.js';
-            // Mostrar aviso al entrar solo cuando YA se está en un formulario
-            // excluido, evitando advertencias en los formularios incluidos.
+            // El aviso aparece solamente si la OV ya usa un formulario excluido.
+            // La comprobación definitiva protege también el cambio simultáneo
+            // de formulario y cliente en beforeSubmit.
             if (excluido(rec, cfg)) {
                 ctx.form.addPageInitMessage({
                     type: message.Type.WARNING,
@@ -220,9 +297,11 @@ define(['N/record', 'N/runtime', 'N/error', 'N/log', 'N/ui/message', 'N/ui/serve
             C.fail('El indicador de cierre definitivo sólo se administra desde el botón Cerrar OV.');
         }
 
+        // Aplicar la restricción SOLO a formularios excluidos configurados.
+        // El cliente anterior se obtiene de oldRecord o del registro persistido
+        // en XEDIT; funciona sin importar el rol del usuario.
         const cfg = C.get();
-        // Respaldo servidor: también aplica a XEDIT, CSV, integraciones y
-        // cambios por URL que no disparan el Client Script.
+        diagnosticarCambioCliente(ctx, prior, cfg);
         validarCambioClienteMostrador(ctx, prior, cfg);
         if (Close.isClosed(rec)) {
             // Sólo el Suitelet puede ejecutar la transición FALSE -> TRUE.

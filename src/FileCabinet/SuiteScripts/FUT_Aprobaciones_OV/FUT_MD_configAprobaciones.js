@@ -23,6 +23,8 @@ define(['N/search', 'N/error'], (search, error) => {
         excluded: 'custrecord_fut_cfg_forms_excl',
         terms: 'custrecord_fut_cfg_base_terms',
         price: 'custrecord_fut_cfg_base_price',
+        lockTerms: 'custrecord_fut_cfg_lock_terms',
+        lockPrice: 'custrecord_fut_cfg_lock_price',
         closeOnReject: 'custrecord_fut_cfg_close_rej'
     });
     const isOn = value => value === true || value === 'T';
@@ -51,7 +53,8 @@ define(['N/search', 'N/error'], (search, error) => {
     function get() {
         const row = uniqueRow([
             'internalid', FIELD.enabled, FIELD.initial, FIELD.reapprove,
-            FIELD.excluded, FIELD.terms, FIELD.price, FIELD.closeOnReject
+            FIELD.excluded, FIELD.terms, FIELD.price,
+            FIELD.lockTerms, FIELD.lockPrice, FIELD.closeOnReject
         ]);
         const g = name => row.getValue({ name: FIELD[name] });
         if (!isOn(g('enabled'))) fail('La configuración FUT está deshabilitada. No es seguro procesar aprobaciones.');
@@ -61,10 +64,20 @@ define(['N/search', 'N/error'], (search, error) => {
             excluded: idList(g('excluded')),
             baseTerms: String(g('terms') || '').trim(),
             basePrice: String(g('price') || '').trim(),
+            lockTerms: String(g('lockTerms') || '').trim(),
+            lockPrice: String(g('lockPrice') || '').trim(),
             closeOnReject: isOn(g('closeOnReject'))
         };
         if (!cfg.initial.length || !cfg.reapprove.length || !cfg.baseTerms || !cfg.basePrice) {
             fail('La configuración FUT requiere formularios iniciales, de reaprobación, término base y precio base.');
+        }
+        // Los campos protegidos pueden estar vacíos sin detener el procesamiento.
+        // Mientras falte cualquiera, la restricción de cambio de cliente queda inactiva.
+        // Las condiciones base de aprobación permanecen obligatorias e independientes.
+        // Si se capturan valores, deben ser IDs internos válidos.
+        if ((cfg.lockTerms && !/^\d+$/.test(cfg.lockTerms)) ||
+            (cfg.lockPrice && !/^-?\d+$/.test(cfg.lockPrice))) {
+            fail('CONFIG_UNICA requiere IDs internos válidos en los valores protegidos.');
         }
         if (cfg.initial.some(x => cfg.excluded.includes(x)) ||
             cfg.reapprove.some(x => cfg.excluded.includes(x))) {
