@@ -1,8 +1,7 @@
 /**
  * @NApiVersion 2.1
  * @NScriptType ClientScript
- * FUT | Botones de aprobación, rechazo y cierre definitivo en modo VIEW.
- * Se adjunta mediante form.clientScriptModulePath (no despliegue global).
+ * FUT | Botones de aprobación, rechazo y cierre definitivo en modo vista
  */
 define(['N/url', 'N/https', 'N/ui/dialog'], (url, https, dialog) => {
     const scriptId = 'customscript_fut_sl_ordenAprob';
@@ -44,7 +43,6 @@ define(['N/url', 'N/https', 'N/ui/dialog'], (url, https, dialog) => {
 
     function saveRecord(context) {
         // Impide el guardado desde la interfaz, sin consultar nuevamente NetSuite.
-        // El User Event es la autoridad para cambios por otras vías.
         if (!clienteProtegidoModificado(context.currentRecord)) return true;
         dialog.alert({title: 'Cambio de cliente no permitido', message: MSG_MOSTRADOR});
         return false;
@@ -108,7 +106,7 @@ define(['N/url', 'N/https', 'N/ui/dialog'], (url, https, dialog) => {
     function futCerrar(id) {
         if (busy) return;
         // La advertencia y confirmación se muestran desde la propia OV.
-        // Aceptar abre el formulario de motivo; todavía NO cierra la orden.
+        // Aceptar abre el formulario de motivo
         dialog.confirm({
             title: 'Atención: cierre definitivo',
             message: 'Esta orden de venta se cerrará definitivamente una vez que ' +
@@ -125,7 +123,7 @@ define(['N/url', 'N/https', 'N/ui/dialog'], (url, https, dialog) => {
         }));
     }
     function pageInit(context) {
-        // Entrada necesaria de SuiteScript 2.1. Los botones invocan las funciones.
+
     }
     return {pageInit, fieldChanged, saveRecord, futAprobar, futRechazar, futCerrar};
 });

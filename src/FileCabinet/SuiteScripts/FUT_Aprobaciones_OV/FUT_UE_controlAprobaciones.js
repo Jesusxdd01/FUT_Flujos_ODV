@@ -59,7 +59,6 @@ define(['N/record', 'N/runtime', 'N/error', 'N/log', 'N/ui/message', 'N/ui/serve
 
     // Restricción de cambio de cliente en los formularios excluidos de CONFIG_UNICA.
     // El perfil protegido usa lockTerms y lockPrice, no baseTerms ni basePrice.
-    // Se compara por IDs internos configurados, no por etiquetas.
     // Se evalúa únicamente el cliente previamente guardado en la OV.
     const MSG_MOSTRADOR =
         'Para evitar inconsistencias con las transacciones relacionadas, ' +

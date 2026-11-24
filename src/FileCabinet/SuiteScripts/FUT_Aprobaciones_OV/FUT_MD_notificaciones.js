@@ -2,10 +2,6 @@
  * @NApiVersion 2.1
  * @NModuleScope SameAccount
  * Notificaciones de aprobaciones de OV: destinatarios por etapa y cola de envíos.
- * Biblioteca compartida. No requiere despliegue individual.
- *
- * Importante: la preparación de destinatarios es una fotografía de la matriz
- * al momento de la acción. El Scheduled Script envía después sin recalcularla.
  */
 define(['N/record', 'N/search', 'N/email', 'N/url', 'N/log', 'N/runtime',
         './FUT_MD_configAprobaciones', './FUT_MD_motorAprobaciones',
@@ -130,8 +126,7 @@ define(['N/record', 'N/search', 'N/email', 'N/url', 'N/log', 'N/runtime',
         }
     }
 
-    // Plantillas sobrias y adaptables a clientes de correo tradicionales.
-    // Se evita mostrar códigos, campos internos o mensajes técnicos.
+    // Plantillas 
     const compactar = texto => String(texto === null || texto === undefined ? '' : texto)
         .replace(/\s+/g, ' ').trim();
 
@@ -239,9 +234,7 @@ define(['N/record', 'N/search', 'N/email', 'N/url', 'N/log', 'N/runtime',
             ? 'La orden ' + ordenVisible + ' está pendiente de su autorización.'
             : titulo + ': ' + ordenVisible;
 
-        // Diseño limpio, similar a un formulario de NetSuite: fondo blanco,
-        // tipografía estándar y líneas de separación, sin tarjetas ni rellenos.
-        // Se usan tablas y estilos inline para compatibilidad con Outlook.
+        // Diseño limpio
         const cuerpo = '<!doctype html><html lang="es"><head>' +
             '<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">' +
             '<title>' + escapeHtml(titulo) + '</title></head>' +

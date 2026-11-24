@@ -2,8 +2,6 @@
  * @NApiVersion 2.1
  * @NModuleScope SameAccount
  * FUT | Validaciones compartidas para cierre definitivo de OV.
- * NO requiere registro ni despliegue de script.
- *
  * IMPORTANTE: una OV en Pending Approval NO admite cerrar líneas nativamente.
  * Se bloquea operativamente con candado FUT y estado nativo A.
  * En estado B, se cierran las líneas nativas además del candado FUT.
@@ -24,7 +22,7 @@ define(['N/search', './FUT_MD_configAprobaciones', './FUT_MD_motorAprobaciones',
 
     function assertRelatedTransactionsAbsent(soId) {
         // El filtro captura documentos relacionados incluso cuando aún no
-        // se ha contabilizado la cantidad (p.ej. fulfillment en Picked).
+        // se ha contabilizado la cantidad
         const rows = search.create({
             type: search.Type.TRANSACTION,
             filters: [

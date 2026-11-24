@@ -21,7 +21,7 @@ define(['N/record', 'N/runtime', 'N/ui/serverWidget', 'N/log', 'N/search',
     const val = (rec, id) => rec.getValue({fieldId: id});
     const uid = () => String(runtime.getCurrentUser().id);
 
-    // Ruta independiente de las matrices; licitaciones usan otro proceso.
+    // Ruta independiente de las matrices.
     function aprobacionGeneral(rec, cfg) {
         return !M.isOn(val(rec, 'custbody_licitacion')) &&
             (!C.applies(rec, cfg, 'initial') || M.checked(rec).length === 0);
@@ -138,10 +138,8 @@ define(['N/record', 'N/runtime', 'N/ui/serverWidget', 'N/log', 'N/search',
         reason.isMandatory = true;
 
         if (closing) {
-            // El usuario ya aceptó el diálogo nativo en la OV.
             // Se conserva el indicador como campo oculto para que el POST
             // no se procese por accidente sin recorrer el formulario.
-            // Esto NO sustituye la validación de estado/cierre en servidor.
             const confirmation = form.addField({
                 id: 'custpage_confirmacion',
                 label: 'Confirmación previa',

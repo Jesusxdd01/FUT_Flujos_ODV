@@ -1,8 +1,7 @@
 /**
  * @NApiVersion 2.1
  * @NModuleScope SameAccount
- * FUT | Configuración ÚNICA en registro personalizado; sin parámetros de script.
- * Crear customrecord_fut_apr_cfg y sus campos antes del despliegue.
+ * FUT | Configuración ÚNICA en registro personalizado.
  */
 define(['N/search', 'N/error'], (search, error) => {
     const CFG = 'customrecord_fut_apr_cfg';

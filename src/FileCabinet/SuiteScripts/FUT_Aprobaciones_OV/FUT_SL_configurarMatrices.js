@@ -1,10 +1,9 @@
 /**
  * @NApiVersion 2.1
  * @NScriptType Suitelet
- * Configuración de matrices de aprobación (administración por empleado).
+ * Configuración de matrices de aprobación.
  * Script ID: customscript_fut_sl_cfg_matrices
  * Deployment ID: customdeploy_fut_sl_cfg_matrices
- * Restringir el despliegue al rol administrador desde Audience.
  */
 define([
     'N/ui/serverWidget','N/ui/message','N/url','N/redirect','N/log',
@@ -73,7 +72,7 @@ define([
     }
 
     // ==========================================================
-    // PANTALLA PRINCIPAL: CONSERVA FILTROS Y LISTADO
+    // PANTALLA PRINCIPAL
     // ==========================================================
     function listPage(ctx,filters,err) {
         const form=ui.createForm({title:'Configuración de matrices de aprobación'});
@@ -115,7 +114,7 @@ define([
     }
 
     // ==========================================================
-    // CREAR MATRIZ: N1 REQUIERE APROBADOR INICIAL
+    // CREAR MATRIZ
     // ==========================================================
     function createPage(ctx,values,err) {
         const form=ui.createForm({title:'Nueva matriz de aprobación'});
@@ -154,7 +153,7 @@ define([
     }
 
     // ==========================================================
-    // EDITAR MATRIZ: AGREGAR UNO + 2 LISTAS DE APROBADORES
+    // EDITAR MATRIZ
     // ==========================================================
     function editPage(ctx,matrixId,err) {
         const matrix=A.getMatrix(matrixId);

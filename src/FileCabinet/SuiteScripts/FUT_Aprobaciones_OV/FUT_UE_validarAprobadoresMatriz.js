@@ -2,7 +2,6 @@
  * @NApiVersion 2.1
  * @NScriptType UserEventScript
  * FUT | Validación de aprobadores incluso en la edición nativa del detalle.
- * NUEVO (recomendado si los detalles de la matriz pueden editarse directamente).
  * Desplegar sobre customrecord_nso_detail_apm.
  */
 define(['N/record','N/search','N/error',

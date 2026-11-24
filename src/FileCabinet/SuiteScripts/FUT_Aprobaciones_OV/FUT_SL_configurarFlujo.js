@@ -5,8 +5,6 @@
  * Script ID: customscript_fut_sl_cfg_flujo
  * Deployment ID: customdeploy_fut_sl_cfg_flujo
  * Administra EXCLUSIVAMENTE el registro CONFIG_UNICA.
- * Nunca muestra ni modifica términos de pago ni nivel de precio base.
- * Restringir el despliegue al rol administrador desde Audience.
  */
 define([
     'N/ui/serverWidget','N/ui/message','N/redirect','N/url','N/log',
@@ -60,7 +58,7 @@ define([
     }
 
     // ==========================================================
-    // PANTALLA PRINCIPAL: UN SELECTOR + TRES LISTAS
+    // PANTALLA PRINCIPAL
     // ==========================================================
     function show(ctx,errorText,submitted) {
         const current=A.getFlow();   // Solo CONFIG_UNICA.

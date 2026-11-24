@@ -3,7 +3,6 @@
  * @NScriptType ClientScript
  * @NModuleScope SameAccount
  * Confirmación nativa para acciones de administración de matrices y flujo.
- * Se asocia con form.clientScriptModulePath; sin despliegue independiente.
  */
 define(['N/ui/dialog','N/https','N/url','N/currentRecord'],(dialog,https,url,currentRecord)=>{
     const MATRIX_SCRIPT='customscript_fut_sl_cfg_matrices';
@@ -77,8 +76,7 @@ define(['N/ui/dialog','N/https','N/url','N/currentRecord'],(dialog,https,url,cur
         }).catch(notifyError).finally(()=>{working=false;});
     }
     function fieldChanged(context) {
-        // En creación de matrices, recargar los candidatos cuando cambia
-        // la subsidiaria. El servidor construye una lista restringida.
+        // En creación de matrices, recargar los candidatos cuando cambia la subsidiaria
         if (context.fieldId!=='custpage_subsidiary') return;
         const rec=context.currentRecord;
         const sub=String(rec.getValue({fieldId:'custpage_subsidiary'}) || '');

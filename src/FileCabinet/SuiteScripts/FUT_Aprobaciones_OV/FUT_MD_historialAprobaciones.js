@@ -2,7 +2,6 @@
  * @NApiVersion 2.1
  * @NModuleScope SameAccount
  * FUT | Auditoría de eventos del proceso de aprobaciones de OV.
- * Módulo de biblioteca: no crear un registro/despliegue de script.
  */
 define(['N/record', 'N/search', 'N/log'], (record, search, log) => {
     const TIPO = 'customrecord_fut_apr_evento';

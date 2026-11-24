@@ -1,13 +1,12 @@
 /**
  * @NApiVersion 2.1
  * @NModuleScope SameAccount
- * FUT - Motor de aprobaciones y matrices existentes de Netsoft.
- * Biblioteca: no requiere registro ni despliegue de script.
+ * FUT - Motor de aprobaciones y matrices existentes.
  */
 define(['N/search', 'N/error', './FUT_MD_configAprobaciones'],
     (search, error, C) => {
     const F = C.F;
-    // Orden Netsoft: 1,2,3,4,5,6,8,7. Aprobación Especial fuera de alcance.
+    // Orden: 1,2,3,4,5,6,8,7. Aprobación Especial fuera de alcance.
     const RULES = Object.freeze([
         { code:'1', name:'% de descuento', condition:'custbody_nso_fut_discount_rate', approved:'custbody_nso_fut_app_percent_discount' },
         { code:'2', name:'Precio específico', condition:'custbody_nso_fut_price_specific', approved:'custbody_nso_fut_app_specific_price' },
@@ -169,7 +168,7 @@ define(['N/search', 'N/error', './FUT_MD_configAprobaciones'],
         return blank;
     }
     function sync(rec,cfg,h) {
-        // Los checkboxes son representación del historial validado, no fuente de autoridad.
+        // Los checkboxes son representación del historial validado.
         const active = checked(rec);
         const groups = active.map(rule => ({rule,levels:matrix(rule.code,get(rec,'subsidiary'),cfg)}));
         for (const rule of RULES) {
@@ -268,8 +267,8 @@ define(['N/search', 'N/error', './FUT_MD_configAprobaciones'],
         RULES.forEach(r=>{ put(rec,r.approved,false); if(r.first)put(rec,r.first,false); });
         put(rec,F.reason,text); put(rec,F.level,null); put(rec,F.next,[]); put(rec,'orderstatus','A');
         writeHistory(rec,h);
-        // El Netsoft original cierra todas las líneas al rechazar.
-        // No hacerlo por defecto: activar sólo si negocio valida dicho comportamiento.
+
+        
         if (cfg.closeOnReject) {
             const n=rec.getLineCount({sublistId:'item'});
             for (let i=0; i<n; i++) {

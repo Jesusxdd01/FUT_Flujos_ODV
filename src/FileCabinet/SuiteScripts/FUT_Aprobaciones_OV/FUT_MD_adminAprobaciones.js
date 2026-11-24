@@ -20,7 +20,7 @@ define(['N/record','N/search','N/error','N/log',
         level: 'custrecord_dapm_level_approval',
         users: 'custrecord_dapm_approval_alternate'
     });
-    // El motor actualmente reconoce las condiciones 1..8 y niveles 1..2.
+
     const ENGINE_CONDITIONS = ['1','2','3','4','5','6','7','8'];
 
     function fail(message) {
@@ -113,7 +113,6 @@ define(['N/record','N/search','N/error','N/log',
         }
     }
     // La subsidiaria raíz del grupo se obtiene de la jerarquía real,
-    // sin codificar IDs que podrían diferir entre Sandbox y Producción.
     function getRootSubsidiary(subsidiary) {
         let current=requiredId(subsidiary,'subsidiaria');
         const visited=new Set();
@@ -187,8 +186,7 @@ define(['N/record','N/search','N/error','N/log',
         rec.setValue({fieldId:DF.parent,value:Number(matrixId)});
         rec.setValue({fieldId:DF.subsidiary,value:Number(subsidiary)});
         rec.setValue({fieldId:DF.level,value:Number(level)});
-        // El campo es MULTISELECT. N/record espera un array, NO el
-        // texto con separadores internos (\u0005) usado por algunas búsquedas.
+        // El campo es MULTISELECT. N/record espera un array
         try {
             rec.setValue({fieldId:DF.users,value:users.map(String)});
         } catch (e) {
@@ -335,7 +333,6 @@ define(['N/record','N/search','N/error','N/log',
             const name=String(r.getValue({name:'entityid'}) || ('Empleado '+r.id));
             rows.push({
                 id:String(r.id),name:name,
-                // Etiqueta informativa; no determina si el empleado es elegible.
                 source:employeeSub===sub?'local':(employeeSub===root?'principal':'autorizado')
             });
             return true;
@@ -359,8 +356,7 @@ define(['N/record','N/search','N/error','N/log',
                 +'subsidiaria principal del grupo.');
         }
     }
-    // Actualizar SOLO el nivel afectado, manteniendo intactos los demás.
-    // Regrabar niveles sin cambios puede fallar al revalidar filtros heredados.
+    // Actualizar sola el nivel afectado, manteniendo intactos los demás.
     function updateSingleLevel(matrix,level,users) {
         const existing=matrix.details.filter(d=>d.level===String(level));
         if (existing.length>1) fail('Hay detalles duplicados para el nivel '+level+'.');
@@ -380,7 +376,7 @@ define(['N/record','N/search','N/error','N/log',
     }
 
     // ============================================================
-    // ADMINISTRACIÓN GRANULAR: UN EMPLEADO POR OPERACIÓN
+    // UN EMPLEADO POR OPERACIÓN
     // ============================================================
     function employeesById(employeeIds) {
         const result = {};
@@ -458,7 +454,7 @@ define(['N/record','N/search','N/error','N/log',
     }
 
     // ============================================================
-    // CONFIGURAR FLUJO: AÑADIR O QUITAR UN FORMULARIO
+    // AÑADIR O QUITAR UN FORMULARIO
     // ============================================================
     const FLOW_GROUPS=Object.freeze({
         initial:'Aprobación inicial',

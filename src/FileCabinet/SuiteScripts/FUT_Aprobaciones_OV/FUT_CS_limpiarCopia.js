@@ -1,7 +1,7 @@
 /**
  * @NApiVersion 2.1
  * @NScriptType ClientScript
- * FUT | Limpia campos heredados al copiar OV (el UE lo refuerza en CREATE).
+ * FUT | Limpia campos heredados al copiar OV 
  * Script: customscript_fut_cs_limpiarCopia
  * Deploy: customdeploy_fut_cs_limpiarCopia (Sales Order)
  */
@@ -33,7 +33,6 @@ define([], () => {
         trySet(rec,'custbody_nso_limite_credito',0);
         trySet(rec,'custbody_nso_limite_credito_actual',0);
         trySet(rec,'custbody_fut_apr_hist','');
-        // Intencionalmente NO modifica custbody_nso_descuento_especial.
     }
     return {pageInit};
 });

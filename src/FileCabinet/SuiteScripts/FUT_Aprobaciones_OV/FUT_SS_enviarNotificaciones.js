@@ -5,7 +5,6 @@
  * Usar DOS despliegues de este mismo script:
  *  - customdeploy_fut_ss_envio_notif    -> Not Scheduled, disparo por N/task
  *  - customdeploy_fut_ss_notif_respaldo -> Scheduled, cada 15 minutos
- * No se requiere modificar el código según el despliegue ejecutado.
  */
 define(['N/log', 'N/runtime', './FUT_MD_notificaciones'],
     (log, runtime, N) => {

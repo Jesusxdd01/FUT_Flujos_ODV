@@ -2,12 +2,10 @@
  * @NApiVersion 2.1
  * @NModuleScope SameAccount
  * FUT | Solicita de manera asíncrona el procesamiento de correos.
- * Biblioteca compartida, sin registro ni despliegue propio.
  */
 define(['N/task', 'N/log'], (task, log) => {
     const SCRIPT_ID = 'customscript_fut_ss_envio_notif';
-    // SOLO el despliegue a demanda se invoca por N/task.
-    // El despliegue de respaldo Scheduled se configura en la UI.
+
     const DEPLOYMENT_ID = 'customdeploy_fut_ss_envio_notif';
 
     function solicitar(origen) {
